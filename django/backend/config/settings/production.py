@@ -18,16 +18,21 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 REST_AUTH["JWT_AUTH_SECURE"] = True  # noqa: F405
 REST_AUTH["JWT_AUTH_SAMESITE"] = "Lax"  # noqa: F405
 
-# Sentry
-import sentry_sdk
-from sentry_sdk.integrations.django import DjangoIntegration
-from sentry_sdk.integrations.celery import CeleryIntegration
+# Sentry (optional — only if sentry-sdk is installed)
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
 
-sentry_sdk.init(
-    dsn=config("SENTRY_DSN", default=""),
-    integrations=[DjangoIntegration(), CeleryIntegration()],
-    traces_sample_rate=0.1,
-)
+    sentry_dsn = config("SENTRY_DSN", default="")
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            integrations=[DjangoIntegration(), CeleryIntegration()],
+            traces_sample_rate=0.1,
+        )
+except ImportError:
+    pass
 
 # Structured JSON logging in production
 import structlog  # noqa: E402
