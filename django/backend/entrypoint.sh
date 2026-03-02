@@ -7,10 +7,15 @@ while ! python -c "import socket; s=socket.create_connection(('${POSTGRES_HOST:-
 done
 echo "PostgreSQL is ready!"
 
-echo "Running migrations..."
-python manage.py migrate --noinput
+# Only run migrations from the backend container (not celery workers)
+if echo "$@" | grep -q "manage.py"; then
+    echo "Running migrations..."
+    python manage.py migrate --noinput
 
-echo "Collecting static files..."
-python manage.py collectstatic --noinput 2>/dev/null || true
+    echo "Collecting static files..."
+    python manage.py collectstatic --noinput 2>/dev/null || true
+else
+    echo "Skipping migrations (worker process)."
+fi
 
 exec "$@"
