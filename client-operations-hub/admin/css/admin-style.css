@@ -1,0 +1,627 @@
+/**
+ * Client Operations Hub - Admin Styles
+ */
+
+/* =========================================================================
+   Layout
+   ========================================================================= */
+
+.coh-wrap {
+    max-width: 1400px;
+}
+
+.coh-dashboard-columns {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.coh-dashboard-main {
+    min-width: 0;
+}
+
+.coh-dashboard-sidebar {
+    min-width: 0;
+}
+
+@media (max-width: 1200px) {
+    .coh-dashboard-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =========================================================================
+   KPI Grid
+   ========================================================================= */
+
+.coh-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.coh-kpi-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-left: 4px solid #2271b1;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+}
+
+.coh-kpi-card--danger {
+    border-left-color: #d63638;
+}
+
+.coh-kpi-number {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    color: #1d2327;
+    line-height: 1.2;
+}
+
+.coh-kpi-label {
+    display: block;
+    font-size: 13px;
+    color: #646970;
+    margin-top: 4px;
+}
+
+/* =========================================================================
+   Cards
+   ========================================================================= */
+
+.coh-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.coh-card h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 16px;
+}
+
+.coh-card--danger {
+    border-left: 4px solid #d63638;
+}
+
+/* =========================================================================
+   Tables
+   ========================================================================= */
+
+.coh-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.coh-table th {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid #ddd;
+    font-weight: 600;
+    color: #1d2327;
+    white-space: nowrap;
+}
+
+.coh-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+.coh-table tbody tr:hover {
+    background: #f6f7f7;
+}
+
+.coh-row-overdue {
+    background: #fcf0f1 !important;
+}
+
+.coh-row-overdue:hover {
+    background: #fce8e9 !important;
+}
+
+/* =========================================================================
+   Badges & Signals
+   ========================================================================= */
+
+.coh-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.coh-badge--high {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+.coh-badge--normal {
+    background: #f0f6fc;
+    color: #2271b1;
+}
+
+.coh-badge--low {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+/* Signal dots */
+.coh-signal-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.coh-signal--green .coh-signal-dot,
+.coh-signal--green.coh-signal-dot {
+    background: #00a32a;
+}
+
+.coh-signal--yellow .coh-signal-dot,
+.coh-signal--yellow.coh-signal-dot {
+    background: #dba617;
+}
+
+.coh-signal--red .coh-signal-dot,
+.coh-signal--red.coh-signal-dot {
+    background: #d63638;
+}
+
+/* Tier badges */
+.coh-tier-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.coh-tier--bronze {
+    background: #f5e6d3;
+    color: #8b5e3c;
+}
+
+.coh-tier--silber {
+    background: #e8e8e8;
+    color: #555;
+}
+
+.coh-tier--gold {
+    background: #fff8e1;
+    color: #b8860b;
+}
+
+.coh-tier--platin {
+    background: #e8eaf6;
+    color: #3f51b5;
+}
+
+/* Phase badge */
+.coh-phase-badge {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    border-radius: 50%;
+    background: #2271b1;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Status badges */
+.coh-status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.coh-status--pending {
+    background: #fff8e1;
+    color: #b8860b;
+}
+
+.coh-status--in_progress {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.coh-status--completed {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.coh-status--skipped {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+/* Task type */
+.coh-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    background: #f0f0f1;
+    color: #646970;
+}
+
+/* Overdue days */
+.coh-overdue-days {
+    color: #d63638;
+    font-weight: 700;
+    font-size: 12px;
+}
+
+/* Health score */
+.coh-health-score {
+    font-weight: 700;
+}
+
+.coh-health-score[data-score] {
+    color: #d63638;
+}
+
+.coh-health-score[data-score="30"],
+.coh-health-score[data-score="31"],
+.coh-health-score[data-score="32"],
+.coh-health-score[data-score="33"],
+.coh-health-score[data-score="34"],
+.coh-health-score[data-score="35"],
+.coh-health-score[data-score="36"],
+.coh-health-score[data-score="37"],
+.coh-health-score[data-score="38"],
+.coh-health-score[data-score="39"],
+.coh-health-score[data-score="40"],
+.coh-health-score[data-score="41"],
+.coh-health-score[data-score="42"],
+.coh-health-score[data-score="43"],
+.coh-health-score[data-score="44"],
+.coh-health-score[data-score="45"],
+.coh-health-score[data-score="46"],
+.coh-health-score[data-score="47"],
+.coh-health-score[data-score="48"],
+.coh-health-score[data-score="49"] {
+    color: #dba617;
+}
+
+/* API status */
+.coh-api-status {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.coh-api-status--connected {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.coh-api-status--error {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+.coh-api-status--untested {
+    background: #fff8e1;
+    color: #b8860b;
+}
+
+.coh-api-status--not_configured {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+/* =========================================================================
+   Client List (sidebar)
+   ========================================================================= */
+
+.coh-client-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.coh-client-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid #eee;
+    transition: background 0.15s;
+}
+
+.coh-client-row:hover {
+    background: #f6f7f7;
+    color: inherit;
+}
+
+.coh-client-row .coh-signal-dot {
+    margin-top: 4px;
+}
+
+.coh-client-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.coh-client-info strong {
+    font-size: 13px;
+    color: #1d2327;
+}
+
+.coh-client-meta {
+    font-size: 11px;
+    color: #646970;
+}
+
+.coh-client-next-task {
+    font-size: 11px;
+    color: #2271b1;
+}
+
+/* =========================================================================
+   Tier Distribution
+   ========================================================================= */
+
+.coh-tier-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+
+.coh-tier-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.coh-tier-name {
+    flex: 1;
+    font-size: 13px;
+}
+
+.coh-tier-count {
+    font-weight: 700;
+    font-size: 16px;
+    color: #1d2327;
+}
+
+/* =========================================================================
+   Timeline
+   ========================================================================= */
+
+.coh-timeline {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.coh-timeline-entry {
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.coh-timeline-entry:last-child {
+    border-bottom: none;
+}
+
+.coh-timeline-date {
+    display: block;
+    font-size: 11px;
+    color: #646970;
+    margin-bottom: 2px;
+}
+
+.coh-timeline-entry strong {
+    font-size: 13px;
+    display: block;
+}
+
+.coh-timeline-entry p {
+    font-size: 12px;
+    color: #50575e;
+    margin: 4px 0 0;
+}
+
+.coh-timeline-user {
+    font-size: 11px;
+    color: #646970;
+    font-style: italic;
+}
+
+/* Activity type colors */
+.coh-activity-type--client_created {
+    border-left: 3px solid #00a32a;
+    padding-left: 10px;
+}
+
+.coh-activity-type--task_updated {
+    border-left: 3px solid #2271b1;
+    padding-left: 10px;
+}
+
+.coh-activity-type--note {
+    border-left: 3px solid #dba617;
+    padding-left: 10px;
+}
+
+/* Audit actions */
+.coh-audit-action {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.coh-audit-action--created {
+    color: #00a32a;
+}
+
+.coh-audit-action--updated {
+    color: #2271b1;
+}
+
+.coh-audit-action--deleted {
+    color: #d63638;
+}
+
+/* =========================================================================
+   Forms
+   ========================================================================= */
+
+.coh-form .coh-form-row {
+    margin-bottom: 15px;
+}
+
+.coh-form .coh-form-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 13px;
+}
+
+.coh-form-actions {
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.coh-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.coh-detail-grid > div {
+    padding: 4px 0;
+}
+
+/* Health slider */
+.coh-health-slider {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+}
+
+/* Task description */
+.coh-task-desc {
+    font-size: 12px;
+    color: #646970;
+    margin: 4px 0 0;
+    max-width: 400px;
+}
+
+.coh-task-notes {
+    font-size: 12px;
+    color: #50575e;
+    margin: 4px 0 0;
+}
+
+/* Task filters */
+.coh-task-filters {
+    margin-bottom: 15px;
+    display: flex;
+    gap: 4px;
+}
+
+.coh-task-filter.active {
+    background: #2271b1;
+    color: #fff;
+    border-color: #2271b1;
+}
+
+/* Task status row visibility */
+.coh-task-table tr[data-status].coh-hidden {
+    display: none;
+}
+
+/* Add note */
+.coh-add-note {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.coh-add-note textarea {
+    margin-bottom: 8px;
+}
+
+/* List toolbar */
+.coh-list-toolbar {
+    margin-bottom: 15px;
+}
+
+/* API key input */
+.coh-api-key-input {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.coh-api-key-input input {
+    width: 100%;
+}
+
+/* Code block */
+.coh-code-block {
+    background: #f0f0f1;
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    overflow-x: auto;
+    border: 1px solid #ddd;
+}
+
+/* Empty state */
+.coh-empty {
+    color: #646970;
+    font-style: italic;
+}
+
+/* =========================================================================
+   Responsive
+   ========================================================================= */
+
+@media (max-width: 782px) {
+    .coh-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .coh-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .coh-table {
+        font-size: 12px;
+    }
+}

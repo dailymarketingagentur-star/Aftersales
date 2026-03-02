@@ -1,0 +1,70 @@
+flowchart TD
+
+    START(["Warnsignal erkannt"])
+
+    subgraph KOM["Kommunikation"]
+        W1["Antwortet<br>langsamer als üblich"]
+        W2["Verpasst Calls oder<br>verschiebt wiederholt"]
+        W8["Feedback wird kritischer<br>oder bleibt ganz aus"]
+    end
+
+    subgraph ENG["Engagement"]
+        W3["Dashboard- und<br>Portal-Nutzung sinkt"]
+        W10["Weniger<br>Freigabe-Anfragen"]
+    end
+
+    subgraph BIZ["Business"]
+        W4["Fragt nach<br>Kündigungsfristen"]
+        W5["Neuer Entscheider oder<br>Ansprechpartner"]
+        W6["Erwähnt<br>Budgetkürzungen"]
+        W9["Zahlungen<br>verzögern sich"]
+    end
+
+    subgraph WETTB["Wettbewerb"]
+        W7["Wettbewerber werden<br>erwähnt oder verglichen"]
+    end
+
+    START --> KOM
+    START --> ENG
+    START --> BIZ
+    START --> WETTB
+
+    W1 --> A1["Sofort: Persönlicher Anruf<br>– nicht per Email!"]
+    W2 --> A2["Sofort: Flexibleren Termin<br>und Agenda vorab senden"]
+    W8 --> A8["Sofort: Proaktiv nachfragen<br>und Verbesserung anbieten"]
+    W3 --> A3["Sofort: Kurze Video-<br>Einweisung senden"]
+    W10 --> A10["Sofort: Check-in – Läuft<br>alles wie gewünscht?"]
+    W4 --> A4["Sofort: Geschäftsführer<br>einbeziehen"]
+    W5 --> A5["Sofort: Kennenlern-Call<br>vereinbaren"]
+    W6 --> A6["Sofort: Flexibles Modell<br>anbieten"]
+    W9 --> A9["Sofort: Freundliche<br>Erinnerung senden"]
+    W7 --> A7["Sofort: USPs hervorheben<br>und Ergebnisse zeigen"]
+
+    A1 --> F1["1 Woche: Vor-Ort-Meeting<br>anbieten"]
+    A2 --> F2["1 Woche: Wert der Calls<br>verdeutlichen"]
+    A3 --> F3["1 Woche: Dashboard<br>vereinfachen"]
+    A4 --> F4["1 Woche: Verbesserungsplan<br>präsentieren"]
+    A5 --> F5["1 Woche: Erfolge neu<br>präsentieren"]
+    A6 --> F6["1 Woche: Downgrade statt<br>Kündigung anbieten"]
+    A7 --> F7["1 Woche: Exklusives<br>Angebot erstellen"]
+
+    F4 --> ESC
+    ESC{{"Keine Besserung<br>nach 2 Wochen?"}}
+    F1 --> ESC
+    F2 --> ESC
+    F3 --> ESC
+    F5 --> ESC
+    F6 --> ESC
+    F7 --> ESC
+
+    ESC -->|Ja| EXIT["Exit-Prevention<br>Protokoll aktivieren"]
+
+    classDef warning fill:#f39c12,stroke:#d68910,color:#333
+    classDef action fill:#27ae60,stroke:#1e8449,color:#fff
+    classDef followup fill:#3498db,stroke:#2471a3,color:#fff
+    classDef escalation fill:#e74c3c,stroke:#c0392b,color:#fff
+
+    class W1,W2,W3,W4,W5,W6,W7,W8,W9,W10 warning
+    class A1,A2,A3,A4,A5,A6,A7,A8,A9,A10 action
+    class F1,F2,F3,F4,F5,F6,F7 followup
+    class ESC,EXIT escalation

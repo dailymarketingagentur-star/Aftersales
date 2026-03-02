@@ -1,0 +1,36 @@
+flowchart TD
+
+    EXIT["Exit-Prevention<br>Protokoll aktiviert"]
+
+    EXIT --> INT["Exit-Interview<br>Video-Call, 30 Minuten"]
+
+    INT --> Q1{"Hauptgrund<br>identifiziert?"}
+
+    Q1 -->|Ergebnisse| OA["Option A:<br>Verbesserungsplan mit<br>konkreten Maßnahmen"]
+    Q1 -->|Budget| OB["Option B:<br>Downgrade auf<br>kleineres Paket"]
+    Q1 -->|Timing| OC["Option C:<br>Pause statt Kündigung<br>für 1–3 Monate"]
+    Q1 -->|Endgültig| FINAL["Professionell abschließen<br>Tür offen lassen"]
+
+    OA --> CHECK{{"Kunde bleibt?"}}
+    OB --> CHECK
+    OC --> CHECK
+
+    CHECK -->|Ja| RETAIN["Retention erfolgreich<br>Health Score neu bewerten"]
+    CHECK -->|Nein| FINAL
+
+    FINAL --> WB3["Win-Back Kontakt<br>nach 3 Monaten"]
+    WB3 --> WB6["Win-Back Kontakt<br>nach 6 Monaten"]
+    WB6 --> ARCHIVE["Kunde archivieren<br>Learnings dokumentieren"]
+
+    classDef process fill:#3498db,stroke:#2471a3,color:#fff
+    classDef decision fill:#f39c12,stroke:#d68910,color:#333
+    classDef option fill:#27ae60,stroke:#1e8449,color:#fff
+    classDef winback fill:#9b59b6,stroke:#7d3c98,color:#fff
+    classDef final fill:#e74c3c,stroke:#c0392b,color:#fff
+
+    class EXIT,INT process
+    class Q1,CHECK decision
+    class OA,OB,OC option
+    class RETAIN option
+    class WB3,WB6 winback
+    class FINAL,ARCHIVE final

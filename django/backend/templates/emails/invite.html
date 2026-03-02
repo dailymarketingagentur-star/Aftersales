@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Einladung</title>
+</head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #333;">Sie wurden eingeladen</h1>
+    <p>Hallo,</p>
+    <p>
+        <strong>{{ invited_by }}</strong> hat Sie eingeladen, der Organisation
+        <strong>{{ tenant_name }}</strong> beizutreten.
+    </p>
+    <p>
+        <a href="{{ invite_url }}"
+           style="display: inline-block; padding: 12px 24px; background-color: #000; color: #fff; text-decoration: none; border-radius: 6px;">
+            Einladung annehmen
+        </a>
+    </p>
+    <p style="color: #666; font-size: 14px;">
+        Falls Sie diese Einladung nicht erwartet haben, koennen Sie diese E-Mail ignorieren.
+    </p>
+</body>
+</html>

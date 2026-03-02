@@ -1,0 +1,33 @@
+flowchart LR
+
+    subgraph SCORING["Score-Berechnung"]
+        S["7 Kategorien<br>x Skala 1–5<br>= max. 35 Punkte"]
+    end
+
+    S --> E["30–35<br>Exzellent"]
+    S --> G["24–29<br>Gut"]
+    S --> N["18–23<br>Neutral"]
+    S --> R["12–17<br>Risiko"]
+    S --> K["7–11<br>Kritisch"]
+
+    E --> EA["Testimonial anfragen<br>Referral-Gespräch führen"]
+    G --> GA["Wow-Moment planen<br>Upsell-Chance prüfen"]
+    N --> NA["Proaktiv Feedback einholen<br>Verbesserungen identifizieren"]
+    R --> RA["Sofort Maßnahmen-Plan erstellen<br>Geschäftsführer einbeziehen"]
+    K --> KA["Rettungs-Meeting in 48h<br>Exit-Prevention aktivieren"]
+
+    classDef exzellent fill:#27ae60,stroke:#1e8449,color:#fff
+    classDef gut fill:#85c1e9,stroke:#2980b9,color:#333
+    classDef neutral fill:#f9e79f,stroke:#f1c40f,color:#333
+    classDef risiko fill:#f0b27a,stroke:#e67e22,color:#333
+    classDef kritisch fill:#e74c3c,stroke:#c0392b,color:#fff
+    classDef aktion fill:#ecf0f1,stroke:#bdc3c7,color:#333
+    classDef basis fill:#d5d8dc,stroke:#95a5a6,color:#333
+
+    class S basis
+    class E exzellent
+    class G gut
+    class N neutral
+    class R risiko
+    class K kritisch
+    class EA,GA,NA,RA,KA aktion

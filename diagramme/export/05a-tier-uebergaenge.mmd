@@ -1,0 +1,24 @@
+flowchart TD
+
+    START(( )) --> B
+
+    B["Bronze<br>Neukunde · 0–6 Monate"]
+    B -->|"Aufstieg: 6+ Monate<br>ODER über 3.000 EUR/Monat"| S
+
+    S["Silber<br>Etablierter Kunde"]
+    S -->|"Aufstieg: 12+ Monate UND über 5.000 EUR/Monat<br>ODER aktive Referrals"| G
+
+    G["Gold<br>Premium-Kunde"]
+    G -->|"Aufstieg: 24+ Monate UND über 10.000 EUR/Monat<br>ODER 3+ Referrals"| P
+
+    P["Platin<br>VIP-Kunde"]
+
+    classDef bronze fill:#cd7f32,stroke:#8b5a2b,color:#fff
+    classDef silber fill:#c0c0c0,stroke:#808080,color:#333
+    classDef gold fill:#ffd700,stroke:#b8960f,color:#333
+    classDef platin fill:#e5e4e2,stroke:#71706e,color:#333
+
+    class B bronze
+    class S silber
+    class G gold
+    class P platin

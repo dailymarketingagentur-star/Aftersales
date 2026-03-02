@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>E-Mail bestaetigen</title>
+</head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #333;">E-Mail-Adresse bestaetigen</h1>
+    <p>Hallo,</p>
+    <p>
+        vielen Dank fuer Ihre Registrierung. Bitte bestaetigen Sie Ihre E-Mail-Adresse,
+        indem Sie auf den folgenden Button klicken:
+    </p>
+    <p>
+        <a href="{{ activate_url }}"
+           style="display: inline-block; padding: 12px 24px; background-color: #000; color: #fff; text-decoration: none; border-radius: 6px;">
+            E-Mail bestaetigen
+        </a>
+    </p>
+    <p style="color: #666; font-size: 14px;">
+        Falls der Button nicht funktioniert, kopieren Sie diesen Link in Ihren Browser:
+    </p>
+    <p style="color: #666; font-size: 14px; word-break: break-all;">
+        {{ activate_url }}
+    </p>
+    <p style="color: #666; font-size: 14px;">
+        Falls Sie sich nicht registriert haben, koennen Sie diese E-Mail ignorieren.
+    </p>
+</body>
+</html>

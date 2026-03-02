@@ -1,0 +1,7 @@
+Hallo,
+
+vielen Dank fuer Ihre Registrierung. Bitte bestaetigen Sie Ihre E-Mail-Adresse, indem Sie den folgenden Link oeffnen:
+
+{{ activate_url }}
+
+Falls Sie sich nicht registriert haben, koennen Sie diese E-Mail ignorieren.

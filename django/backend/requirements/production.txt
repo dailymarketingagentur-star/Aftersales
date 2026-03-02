@@ -1,0 +1,6 @@
+-r base.txt
+
+gunicorn>=23.0,<24
+sentry-sdk[django,celery]>=2.14,<3
+django-storages[s3]>=1.14,<2
+django-anymail[mailgun,sendgrid]>=12.0,<13

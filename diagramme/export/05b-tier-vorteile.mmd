@@ -1,0 +1,41 @@
+flowchart TD
+
+    subgraph BRONZE["Bronze · Neukunde · 0–6 Monate"]
+        B1["Standard-Service"]
+        B2["Regelmäßige Updates"]
+        B3["Wöchentliche Status-Email"]
+        B4["Check-in Calls alle 2 Wochen"]
+    end
+
+    subgraph SILBER["Silber · 6+ Monate oder über 3.000 EUR"]
+        S1["Priority Support"]
+        S2["Monatlicher Branchen-Report"]
+        S3["+ Alles aus Bronze"]
+    end
+
+    subgraph GOLD["Gold · 12+ Monate und über 5.000 EUR"]
+        G1["Quartalsweiser Strategie-Workshop"]
+        G2["Beta-Zugang zu neuen Services"]
+        G3["Persönliche Event-Einladungen"]
+        G4["+ Alles aus Silber"]
+    end
+
+    subgraph PLATIN["Platin · 24+ Monate und über 10.000 EUR"]
+        P1["Dedizierter Senior Account Manager"]
+        P2["Jährlicher In-Person Strategy Day"]
+        P3["VIP-Support mit 4h Antwortzeit"]
+        P4["Exklusive Branchenevents"]
+        P5["+ Alles aus Gold"]
+    end
+
+    BRONZE --> SILBER --> GOLD --> PLATIN
+
+    classDef bronze fill:#cd7f32,stroke:#8b5a2b,color:#fff
+    classDef silber fill:#c0c0c0,stroke:#808080,color:#333
+    classDef gold fill:#ffd700,stroke:#b8960f,color:#333
+    classDef platin fill:#e5e4e2,stroke:#71706e,color:#333
+
+    class B1,B2,B3,B4 bronze
+    class S1,S2,S3 silber
+    class G1,G2,G3,G4 gold
+    class P1,P2,P3,P4,P5 platin
