@@ -84,12 +84,13 @@ Setup: copy `django/.env.example` to `django/.env` and `django/frontend/.env.exa
 | `/api/v1/service-types/` | clients — service type lookup |
 | `/api/v1/integrations/` | integrations — 3rd-party connections (Jira, etc.) |
 | `/api/v1/tasks/` | tasks — task management |
+| `/api/v1/nps/` | nps — campaigns, surveys, responses, testimonials |
 | `/health/` | health check (DB + Redis) |
 | `/stripe/` | dj-stripe webhooks |
 
 ### Tenant-Exempt Paths (no X-Tenant-ID required)
 
-`/admin/`, `/health/`, `/stripe/`, `/api/v1/auth/login/`, `/api/v1/auth/registration/`, `/api/v1/auth/token/refresh/`, `/api/v1/auth/password/reset/`, `/api/v1/auth/me/`, `/api/v1/auth/tenants/`, `/api/v1/tenants/`, `/__debug__/`, `/api/v1/emails/track/`, `/api/v1/integrations/twilio/twiml/`
+`/admin/`, `/health/`, `/stripe/`, `/api/v1/auth/login/`, `/api/v1/auth/registration/`, `/api/v1/auth/token/refresh/`, `/api/v1/auth/password/reset/`, `/api/v1/auth/me/`, `/api/v1/auth/tenants/`, `/api/v1/tenants/`, `/__debug__/`, `/api/v1/emails/track/`, `/api/v1/integrations/twilio/twiml/`, `/api/v1/nps/public/`
 
 All other paths require `X-Tenant-ID` header by default.
 
@@ -98,16 +99,16 @@ All other paths require `X-Tenant-ID` header by default.
 ### Backend (django/backend/)
 
 - **Settings:** `config/settings/{base,local,production,test}.py` — multi-environment via python-decouple
-- **9 apps** in `apps/`: `common`, `tenants`, `users`, `billing`, `audit`, `emails`, `clients`, `integrations`, `tasks`
+- **10 apps** in `apps/`: `common`, `tenants`, `users`, `billing`, `audit`, `emails`, `clients`, `integrations`, `tasks`, `nps`
 - **Multi-tenancy:** Tenant-per-row model. `TenantMiddleware` extracts `X-Tenant-ID` header → `request.tenant`. All data models inherit `TenantScopedModel` (abstract base with FK to Tenant). Postgres RLS via `EnableRLS` migration operation (`apps/common/db/rls.py`). `TenantAwareManager` provides `for_tenant()`/`for_tenant_id()` methods
 - **Auth:** Email-based (no username), JWT in HTTP-only cookies (`access` / `refresh`) via dj-rest-auth + allauth + simplejwt. Access token: 15min, refresh: 7 days (rotation + blacklisting). Custom User model with UUID PK
 - **Billing:** dj-stripe integration. `HasActiveSubscription` DRF permission raises 402 (`SubscriptionRequired` exception in `apps/common/exceptions.py`) if no active subscription. `TenantSubscription` caches Stripe status. Free tier: `is_active` returns True for `active`, `trialing`, or `free` status
 - **Permissions** (`apps/common/permissions.py`): `IsTenantMember`, `IsTenantAdmin`, `IsTenantOwner`, `HasActiveSubscription`
 - **API:** REST under `/api/v1/`, pagination 25 items, throttle 20/min (anon) / 100/min (user)
-- **Async:** Celery + Redis for email delivery, scheduled tasks via celery-beat with DatabaseScheduler. Daily Jira health check at 07:00 hardcoded in `config/celery.py`
+- **Async:** Celery + Redis for email delivery, scheduled tasks via celery-beat with DatabaseScheduler. Beat schedule in `config/celery.py`: Jira health check daily 07:00, recurring task schedules daily 08:00, NPS campaign processing daily 08:00, auto-trigger tasks every 15min
 - **Encryption:** Fernet (from `cryptography` lib, derived from `DJANGO_SECRET_KEY` via PBKDF2) in `apps/common/encryption.py`. Used for email provider credentials, Jira/Twilio tokens
 - **Audit:** Append-only `AuditEvent` with before/after JSON snapshots
-- **Integrations registry:** `apps/integrations/registry.py` — 8 types (jira, hubspot, clickup, slack, activecampaign, agencyanalytics, calendly, twilio). Adding a new type only requires a registry entry
+- **Integrations registry:** `apps/integrations/registry.py` — 10 types (jira, hubspot, clickup, slack, activecampaign, agencyanalytics, calendly, twilio, confluence, webhook). Adding a new type only requires a registry entry
 - **Testing:** pytest + factory-boy. Fixtures in `backend/conftest.py` (user_factory, tenant_factory, user, tenant, api_client, authenticated_client). Config in `pyproject.toml`. Test settings: Celery always-eager, throttling disabled, MD5 password hashing for speed
 - **Linting:** ruff (line-length: 120, rules: E/F/W/I/N/UP/B/A/C4/SIM/TCH/RUF), mypy
 
@@ -115,7 +116,7 @@ All other paths require `X-Tenant-ID` header by default.
 
 - **Next.js 15** with App Router, React 19, TypeScript, Tailwind CSS, shadcn/ui
 - **API proxy:** `next.config.ts` rewrites `/api/*` and `/stripe/*` to Django backend
-- **Auth middleware:** `middleware.ts` checks JWT cookie, redirects unauthenticated to `/login`. Public paths: `/`, `/login`, `/register`, `/verify-email/*`
+- **Auth middleware:** `src/middleware.ts` checks JWT cookie, redirects unauthenticated to `/login`. Public paths: `/`, `/login`, `/register`, `/verify-email/*`, `/survey/*`
 - **API client:** `src/lib/api.ts` — `apiFetch()` wrapper injects `X-Tenant-ID` header and credentials
 - **Pages:** `(auth)/` for login/register/verify, `(dashboard)/` for protected routes, `(onboarding)/` for org creation
 - **Dashboard routes:** `/dashboard/`, `/mandanten/` (clients), `/aufgaben/` (tasks, sub: `listen/`, `vorlagen/`), `/integrationen/` (sub: `email/`, `jira/`, `twilio/`), `/billing/`, `/cashflow/`, `/team/`, `/settings/`, `/optionen/`

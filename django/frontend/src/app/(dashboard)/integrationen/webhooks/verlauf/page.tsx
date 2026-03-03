@@ -23,8 +23,9 @@ export default function WebhookVerlaufPage() {
 
   useEffect(() => {
     if (!currentTenantId) return;
-    const params = statusFilter ? `?status=${statusFilter}` : "";
-    apiFetch<ActionExecutionListItem[]>(`/api/v1/integrations/executions/${params}`, {
+    const params = new URLSearchParams({ target_type: "webhook" });
+    if (statusFilter) params.set("status", statusFilter);
+    apiFetch<ActionExecutionListItem[]>(`/api/v1/integrations/executions/?${params}`, {
       tenantId: currentTenantId,
     })
       .then(setExecutions)

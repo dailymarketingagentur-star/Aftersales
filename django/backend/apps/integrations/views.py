@@ -400,6 +400,13 @@ class ExecutionListView(APIView):
         if entity_id:
             qs = qs.filter(entity_id=entity_id)
 
+        target_type = request.query_params.get("target_type")
+        if target_type:
+            qs = qs.filter(
+                models.Q(template__target_type=target_type)
+                | models.Q(sequence__steps__template__target_type=target_type)
+            ).distinct()
+
         return Response(ActionExecutionListSerializer(qs[:100], many=True).data)
 
 

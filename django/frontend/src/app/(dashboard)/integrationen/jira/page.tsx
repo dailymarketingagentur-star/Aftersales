@@ -30,7 +30,7 @@ export default function JiraPage() {
       .then(setSequences)
       .catch(() => {});
 
-    apiFetch<ActionExecutionListItem[]>("/api/v1/integrations/executions/", { tenantId: currentTenantId })
+    apiFetch<ActionExecutionListItem[]>("/api/v1/integrations/executions/?target_type=jira", { tenantId: currentTenantId })
       .then((data) => setRecentExecutions(data.slice(0, 5)))
       .catch(() => {});
   }, [currentTenantId]);

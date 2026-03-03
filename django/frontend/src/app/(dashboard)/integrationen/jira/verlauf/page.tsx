@@ -23,8 +23,9 @@ export default function VerlaufPage() {
 
   useEffect(() => {
     if (!currentTenantId) return;
-    const params = statusFilter ? `?status=${statusFilter}` : "";
-    apiFetch<ActionExecutionListItem[]>(`/api/v1/integrations/executions/${params}`, {
+    const params = new URLSearchParams({ target_type: "jira" });
+    if (statusFilter) params.set("status", statusFilter);
+    apiFetch<ActionExecutionListItem[]>(`/api/v1/integrations/executions/?${params}`, {
       tenantId: currentTenantId,
     })
       .then(setExecutions)

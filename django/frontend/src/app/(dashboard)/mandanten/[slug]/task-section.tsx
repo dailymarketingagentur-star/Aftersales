@@ -1036,6 +1036,7 @@ function TaskRow({
   onToggleExpand,
   onComplete,
   onSkip,
+  onDelete,
   onSubtaskToggle,
   onSendEmail,
   onStartSequence,
@@ -1048,6 +1049,7 @@ function TaskRow({
   onToggleExpand: () => void;
   onComplete: () => void;
   onSkip: () => void;
+  onDelete: () => void;
   onSubtaskToggle: (subtask: Subtask) => void;
   onSendEmail?: () => void;
   onStartSequence?: () => void;
@@ -1119,6 +1121,16 @@ function TaskRow({
           >
             {new Date(task.due_date).toLocaleDateString("de-DE")}
           </span>
+        )}
+        {!done && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            title="Aufgabe löschen"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         )}
       </div>
 
@@ -1199,6 +1211,9 @@ function TaskRow({
               </Button>
               <Button variant="outline" size="sm" onClick={onSkip}>
                 Überspringen
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onDelete}>
+                Löschen
               </Button>
             </div>
           )}
@@ -1408,6 +1423,19 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
     }
   }
 
+  async function handleDeleteTask(taskId: string) {
+    if (!window.confirm("Aufgabe wirklich löschen?")) return;
+    try {
+      await apiFetch(`/api/v1/clients/${slug}/tasks/${taskId}/`, {
+        method: "DELETE",
+        tenantId,
+      });
+      fetchTasks();
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function handleRemoveList(listId: string, listName: string) {
     if (!window.confirm(`Aufgabenliste "${listName}" entfernen? Alle offenen Aufgaben aus dieser Liste werden gelöscht. Erledigte Aufgaben bleiben erhalten.`)) {
       return;
@@ -1497,6 +1525,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
                   }
                   onComplete={() => handleComplete(task.id)}
                   onSkip={() => handleSkip(task.id)}
+                  onDelete={() => handleDeleteTask(task.id)}
                   onSubtaskToggle={(st) => handleSubtaskToggle(task.id, st)}
                   onSendEmail={
                     hasEmailProvider && task.action_type === "email" && task.email_templates_detail?.length > 0
@@ -1601,6 +1630,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
                         }
                         onComplete={() => handleComplete(task.id)}
                         onSkip={() => handleSkip(task.id)}
+                        onDelete={() => handleDeleteTask(task.id)}
                         onSubtaskToggle={(st) =>
                           handleSubtaskToggle(task.id, st)
                         }
@@ -1680,16 +1710,14 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
                     <span className="text-muted-foreground">
                       ({info.open} offen / {info.total} gesamt)
                     </span>
-                    {info.open > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveList(listId, info.name)}
-                        className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        title={`"${info.name}" entfernen`}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveList(listId, info.name)}
+                      className="ml-0.5 rounded-full p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title={`"${info.name}" entfernen`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                   </span>
                 ))}
               </div>
