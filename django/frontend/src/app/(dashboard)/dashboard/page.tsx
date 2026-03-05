@@ -153,20 +153,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!currentTenant) return;
 
-    apiFetch("/api/v1/tasks/dashboard/?due_date=today&status=open,in_progress")
-      .then((res) => res.json())
+    apiFetch<DashboardTask[]>("/api/v1/tasks/dashboard/?due_date=today&status=open,in_progress")
       .then((data) => setTodayTasks(data))
       .catch(() => setTodayTasks([]))
       .finally(() => setLoadingToday(false));
 
-    apiFetch("/api/v1/tasks/dashboard/?status=open,in_progress")
-      .then((res) => res.json())
+    apiFetch<DashboardTask[]>("/api/v1/tasks/dashboard/?status=open,in_progress")
       .then((data) => setAllOpenTasks(data))
       .catch(() => setAllOpenTasks([]))
       .finally(() => setLoadingAll(false));
 
-    apiFetch("/api/v1/tasks/dashboard/?status=planned")
-      .then((res) => res.json())
+    apiFetch<DashboardTask[]>("/api/v1/tasks/dashboard/?status=planned")
       .then((data) => setPlannedTasks(data))
       .catch(() => setPlannedTasks([]))
       .finally(() => setLoadingPlanned(false));
