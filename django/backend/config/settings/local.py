@@ -18,6 +18,7 @@ else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Debug toolbar
+INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
 INTERNAL_IPS = ["127.0.0.1", "172.0.0.0/8"]
 DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: DEBUG}
 

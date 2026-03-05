@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "djstripe",
     "django_celery_beat",
-    "debug_toolbar",
     "structlog",
     "django_structlog",
     # Project apps
