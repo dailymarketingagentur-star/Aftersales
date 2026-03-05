@@ -210,7 +210,7 @@ export default function VorlageDetailPage() {
               <p className="mb-1 text-xs font-medium text-muted-foreground">Verknüpfungen</p>
               <div className="flex flex-wrap gap-2">
                 {template.email_templates_detail?.map((et) => (
-                  <Link key={et.id} href={`/integrationen/email/vorlagen/${et.id}`} className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 transition-colors hover:bg-green-200">
+                  <Link key={et.id} href={`/integrationen/nachrichten/vorlagen/${et.id}`} className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 transition-colors hover:bg-green-200">
                     E-Mail: {et.name}
                   </Link>
                 ))}

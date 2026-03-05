@@ -32,8 +32,8 @@ const TIER_COLORS: Record<string, string> = {
 };
 
 function healthColor(score: number): string {
-  if (score >= 70) return "text-green-600";
-  if (score >= 40) return "text-yellow-600";
+  if (score >= 24) return "text-green-600";
+  if (score >= 18) return "text-yellow-600";
   return "text-red-600";
 }
 
@@ -151,7 +151,7 @@ export default function MandantenPage() {
                   </td>
                   <td className="p-4">
                     <span className={`font-semibold ${healthColor(c.health_score)}`}>
-                      {c.health_score}
+                      {c.health_score}/35
                     </span>
                   </td>
                 </tr>

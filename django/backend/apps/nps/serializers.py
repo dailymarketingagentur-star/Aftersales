@@ -73,6 +73,13 @@ class SendSurveySerializer(serializers.Serializer):
 
     client_id = serializers.UUIDField()
     campaign_id = serializers.UUIDField(required=False, allow_null=True)
+    recipient_email = serializers.EmailField(required=False, allow_null=True)
+
+
+class PreviewNPSSurveySerializer(serializers.Serializer):
+    """Request body for NPS survey preview."""
+
+    client_id = serializers.UUIDField()
 
 
 # ---------------------------------------------------------------------------

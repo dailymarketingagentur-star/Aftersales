@@ -5,6 +5,7 @@ from apps.tasks.views import (
     RecurringScheduleListCreateView,
     RecurringScheduleRunsView,
     RecurringScheduleTriggerView,
+    TaskDashboardView,
     TaskListDetailView,
     TaskListDuplicateView,
     TaskListListCreateView,
@@ -17,6 +18,7 @@ from apps.tasks.views import (
 app_name = "tasks"
 
 urlpatterns = [
+    path("dashboard/", TaskDashboardView.as_view(), name="task-dashboard"),
     path("templates/", TaskTemplateListCreateView.as_view(), name="template-list-create"),
     path("templates/<uuid:pk>/", TaskTemplateDetailView.as_view(), name="template-detail"),
     path("lists/", TaskListListCreateView.as_view(), name="list-list-create"),

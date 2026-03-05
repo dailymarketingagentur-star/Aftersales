@@ -130,6 +130,15 @@ export default function IntegrationenPage() {
             );
           }
 
+          // WhatsApp hat eine eigene Detail-Seite unter Nachrichten
+          if (type.key === "whatsapp") {
+            return (
+              <Link key={type.key} href="/integrationen/nachrichten/whatsapp" className="block">
+                {content}
+              </Link>
+            );
+          }
+
           // Confluence: Hinweis auf geteilte Atlassian-Verbindung
           if (type.key === "confluence") {
             return (
@@ -147,10 +156,10 @@ export default function IntegrationenPage() {
       </div>
 
       {/* E-Mail-Provider — separate Sektion */}
-      <h2 className="text-lg font-semibold">E-Mail-Provider</h2>
+      <h2 className="text-lg font-semibold">Nachrichten-Provider</h2>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* SMTP */}
-        <Link href="/integrationen/email/smtp">
+        <Link href="/integrationen/nachrichten/smtp">
           <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -170,7 +179,7 @@ export default function IntegrationenPage() {
         </Link>
 
         {/* SendGrid */}
-        <Link href="/integrationen/email/sendgrid">
+        <Link href="/integrationen/nachrichten/sendgrid">
           <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">

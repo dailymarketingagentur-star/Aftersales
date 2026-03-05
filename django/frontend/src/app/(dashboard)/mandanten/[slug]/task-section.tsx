@@ -11,6 +11,7 @@ import type { Task, Subtask, TaskStatus, TaskTemplate, TaskList, EmailTemplateSu
 // Constants
 // ---------------------------------------------------------------------------
 const STATUS_LABELS: Record<TaskStatus, string> = {
+  planned: "Geplant",
   open: "Offen",
   in_progress: "In Bearbeitung",
   completed: "Erledigt",
@@ -41,6 +42,9 @@ const ACTION_LABELS: Record<string, string> = {
   jira_project: "Jira-Projekt",
   jira_ticket: "Jira-Ticket",
   webhook: "Webhook",
+  health_check: "Health-Check",
+  churn_check: "Churn-Check",
+  whatsapp: "WhatsApp",
   manual: "Manuell",
 };
 
@@ -61,15 +65,11 @@ const PHASE_LABELS: Record<number, string> = {
 const ONBOARDING_PHASES = [0, 1, 2, 3, 4];
 const ONBOARDING_GROUP_LABELS = ["Setup & Vorbereitung", "Willkommen", "Onboarding", "Erste Woche", "Quick Wins"];
 
-type TabKey = "due" | "backlog" | "onboarding" | "done";
+type TabKey = "due" | "backlog" | "recurring" | "onboarding" | "done";
 
 interface TaskSectionProps {
   slug: string;
   tenantId: string;
-}
-
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function isDoneTask(t: Task): boolean {
@@ -1027,6 +1027,589 @@ function WebhookExecuteModal({
 }
 
 // ---------------------------------------------------------------------------
+// HealthCheckModal — 7 Kategorien (1-5) bewerten
+// ---------------------------------------------------------------------------
+const HEALTH_CATEGORIES: { field: string; label: string; description: string }[] = [
+  { field: "result_satisfaction", label: "Ergebnis-Zufriedenheit", description: "Erreichen wir die vereinbarten KPIs?" },
+  { field: "communication", label: "Kommunikation", description: "Wie gut funktioniert die Zusammenarbeit?" },
+  { field: "engagement", label: "Engagement", description: "Wie aktiv ist der Mandant eingebunden?" },
+  { field: "relationship", label: "Beziehungsqualität", description: "Wie ist die persönliche Beziehung?" },
+  { field: "payment_behavior", label: "Zahlungsverhalten", description: "Werden Rechnungen pünktlich bezahlt?" },
+  { field: "growth_potential", label: "Wachstumspotenzial", description: "Gibt es Upselling-Möglichkeiten?" },
+  { field: "referral_readiness", label: "Empfehlungsbereitschaft", description: "Würde der Mandant uns weiterempfehlen?" },
+];
+
+function HealthCheckModal({
+  slug,
+  taskId,
+  tenantId,
+  onClose,
+  onSubmitted,
+}: {
+  slug: string;
+  taskId: string;
+  tenantId: string;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const [scores, setScores] = useState<Record<string, number>>(() => {
+    const init: Record<string, number> = {};
+    for (const cat of HEALTH_CATEGORIES) init[cat.field] = 3;
+    return init;
+  });
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackType, setFeedbackType] = useState<"success" | "error">("error");
+
+  const totalScore = Object.values(scores).reduce((a, b) => a + b, 0);
+
+  function statusLabel(score: number): string {
+    if (score >= 30) return "Exzellent";
+    if (score >= 24) return "Gut";
+    if (score >= 18) return "Neutral";
+    if (score >= 12) return "Risiko";
+    return "Kritisch";
+  }
+
+  function statusColor(score: number): string {
+    if (score >= 24) return "text-green-600";
+    if (score >= 18) return "text-yellow-600";
+    return "text-red-600";
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setFeedback("");
+    try {
+      const result = await apiFetch<{ detail: string }>(
+        `/api/v1/clients/${slug}/tasks/${taskId}/submit-health-check/`,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...scores, notes }),
+          tenantId,
+        }
+      );
+      setFeedback(result.detail);
+      setFeedbackType("success");
+      setTimeout(() => {
+        onSubmitted();
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Fehler beim Speichern.");
+      setFeedbackType("error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-lg rounded-lg border bg-background shadow-lg">
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="text-lg font-semibold">Health-Score Fragebogen</h2>
+          <button type="button" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&#10005;</button>
+        </div>
+
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto p-4">
+          {HEALTH_CATEGORIES.map((cat) => (
+            <div key={cat.field} className="flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-medium">{cat.label}</p>
+                <p className="text-xs text-muted-foreground">{cat.description}</p>
+              </div>
+              <select
+                className="h-8 w-16 rounded-md border border-input bg-background px-2 text-sm"
+                value={scores[cat.field]}
+                onChange={(e) => setScores({ ...scores, [cat.field]: Number(e.target.value) })}
+              >
+                {[1, 2, 3, 4, 5].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+
+          <div className="space-y-1 pt-2">
+            <label className="text-xs font-medium text-muted-foreground">Notizen (optional)</label>
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md bg-muted p-3">
+            <span className="text-sm font-medium">Gesamt-Score</span>
+            <span className={`text-lg font-bold ${statusColor(totalScore)}`}>
+              {totalScore}/35 — {statusLabel(totalScore)}
+            </span>
+          </div>
+
+          {feedback && (
+            <p className={`text-sm ${feedbackType === "success" ? "text-green-600" : "text-red-600"}`}>
+              {feedback}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>Abbrechen</Button>
+          {feedbackType !== "success" && (
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "Speichern..." : "Health-Check abgeben"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChurnCheckModal — 10 Warnsignale als Checkboxen
+// ---------------------------------------------------------------------------
+const CHURN_SIGNALS: { field: string; label: string }[] = [
+  { field: "slower_responses", label: "Langsamere Antworten auf E-Mails/Anrufe" },
+  { field: "missed_checkins", label: "Verpasste oder abgesagte Check-in-Termine" },
+  { field: "decreased_usage", label: "Weniger Nutzung der bereitgestellten Services" },
+  { field: "contract_inquiries", label: "Fragen zu Vertragslaufzeit oder Kündigungsfristen" },
+  { field: "new_decision_maker", label: "Neuer Ansprechpartner / Entscheider" },
+  { field: "budget_cuts_mentioned", label: "Budgetkürzungen erwähnt" },
+  { field: "competitor_mentions", label: "Wettbewerber oder Alternativen erwähnt" },
+  { field: "critical_feedback", label: "Kritisches Feedback oder Beschwerden" },
+  { field: "delayed_payments", label: "Verspätete Zahlungen" },
+  { field: "fewer_approvals", label: "Weniger Freigaben / geringere Beteiligung" },
+];
+
+function ChurnCheckModal({
+  slug,
+  taskId,
+  tenantId,
+  onClose,
+  onSubmitted,
+}: {
+  slug: string;
+  taskId: string;
+  tenantId: string;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const [signals, setSignals] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const s of CHURN_SIGNALS) init[s.field] = false;
+    return init;
+  });
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackType, setFeedbackType] = useState<"success" | "error">("error");
+
+  const activeCount = Object.values(signals).filter(Boolean).length;
+
+  function churnColor(count: number): string {
+    if (count <= 1) return "text-green-600";
+    if (count <= 3) return "text-yellow-600";
+    return "text-red-600";
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setFeedback("");
+    try {
+      const result = await apiFetch<{ detail: string }>(
+        `/api/v1/clients/${slug}/tasks/${taskId}/submit-churn-check/`,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...signals, notes }),
+          tenantId,
+        }
+      );
+      setFeedback(result.detail);
+      setFeedbackType("success");
+      setTimeout(() => {
+        onSubmitted();
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Fehler beim Speichern.");
+      setFeedbackType("error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-lg rounded-lg border bg-background shadow-lg">
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="text-lg font-semibold">Churn-Warnsignale prüfen</h2>
+          <button type="button" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground">&#10005;</button>
+        </div>
+
+        <div className="max-h-[60vh] space-y-3 overflow-y-auto p-4">
+          {CHURN_SIGNALS.map((s) => (
+            <label key={s.field} className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={signals[s.field]}
+                onChange={() => setSignals({ ...signals, [s.field]: !signals[s.field] })}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <span className="text-sm">{s.label}</span>
+            </label>
+          ))}
+
+          <div className="space-y-1 pt-2">
+            <label className="text-xs font-medium text-muted-foreground">Notizen (optional)</label>
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md bg-muted p-3">
+            <span className="text-sm font-medium">Warnsignale aktiv</span>
+            <span className={`text-lg font-bold ${churnColor(activeCount)}`}>
+              {activeCount}/10
+            </span>
+          </div>
+
+          {feedback && (
+            <p className={`text-sm ${feedbackType === "success" ? "text-green-600" : "text-red-600"}`}>
+              {feedback}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>Abbrechen</Button>
+          {feedbackType !== "success" && (
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? "Speichern..." : "Churn-Check abgeben"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WhatsAppSendModal — WhatsApp-Nachricht aus Task senden
+// ---------------------------------------------------------------------------
+function WhatsAppSendModal({
+  slug,
+  taskId,
+  taskTitle,
+  tenantId,
+  onClose,
+  onSent,
+}: {
+  slug: string;
+  taskId: string;
+  taskTitle: string;
+  tenantId: string;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [phoneNumbers, setPhoneNumbers] = useState<{ label: string; number: string }[]>([]);
+  const [selectedNumber, setSelectedNumber] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<{ phone_numbers: { label: string; number: string }[] }>(
+      `/api/v1/clients/${slug}/`,
+      { tenantId }
+    )
+      .then((client) => {
+        const nums = client.phone_numbers || [];
+        setPhoneNumbers(nums);
+        if (nums.length > 0) setSelectedNumber(nums[0].number);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [slug, tenantId]);
+
+  async function handleSend() {
+    if (!selectedNumber || !messageText.trim()) return;
+    setSending(true);
+    setFeedback("");
+    try {
+      await apiFetch("/api/v1/integrations/whatsapp/send/", {
+        method: "POST",
+        body: JSON.stringify({
+          to_number: selectedNumber,
+          body_text: messageText.trim(),
+          client_slug: slug,
+        }),
+        tenantId,
+      });
+      // Auto-complete the task
+      try {
+        await apiFetch(`/api/v1/clients/${slug}/tasks/${taskId}/complete/`, {
+          method: "POST",
+          body: JSON.stringify({}),
+          tenantId,
+        });
+      } catch {
+        // Complete-Fehler ignorieren
+      }
+      setFeedback("WhatsApp-Nachricht wurde gesendet!");
+      setTimeout(() => {
+        onSent();
+        onClose();
+      }, 1200);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Fehler beim Senden.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-md rounded-lg border bg-background shadow-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="text-lg font-semibold">WhatsApp senden</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            &#10005;
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="space-y-4 p-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Aufgabe</p>
+            <p className="text-sm font-medium">{taskTitle}</p>
+          </div>
+
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Lade Telefonnummern...</p>
+          ) : phoneNumbers.length === 0 ? (
+            <div className="rounded border border-yellow-200 bg-yellow-50 p-3">
+              <p className="text-sm text-yellow-800">
+                Keine Telefonnummern für diesen Mandanten hinterlegt.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Empfänger
+                </label>
+                <select
+                  value={selectedNumber}
+                  onChange={(e) => setSelectedNumber(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {phoneNumbers.map((pn) => (
+                    <option key={pn.number} value={pn.number}>
+                      {pn.label ? `${pn.label}: ${pn.number}` : pn.number}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Nachricht
+                </label>
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  placeholder="Nachricht eingeben..."
+                  rows={4}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  autoFocus
+                />
+              </div>
+            </>
+          )}
+
+          {feedback && (
+            <p className={`text-sm ${feedback.includes("gesendet") ? "text-green-600" : "text-red-600"}`}>
+              {feedback}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleSend}
+            disabled={sending || !selectedNumber || !messageText.trim()}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            {sending ? "Sende..." : "WhatsApp senden"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ManualTaskCreateModal — Neue manuelle Aufgabe erstellen
+// ---------------------------------------------------------------------------
+function ManualTaskCreateModal({
+  slug,
+  tenantId,
+  onClose,
+  onCreated,
+}: {
+  slug: string;
+  tenantId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueDate, setDueDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit() {
+    if (!title.trim()) return;
+    setCreating(true);
+    setError("");
+    try {
+      await apiFetch(`/api/v1/clients/${slug}/tasks/`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || undefined,
+          priority,
+          due_date: dueDate || null,
+          notes: notes.trim() || undefined,
+          action_type: "manual",
+        }),
+        tenantId,
+      });
+      onCreated();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Fehler beim Erstellen.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 w-full max-w-md rounded-lg border bg-background shadow-lg">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b p-4">
+          <h2 className="text-lg font-semibold">Neue Aufgabe</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            &#10005;
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="space-y-4 p-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Titel *
+            </label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="z.B. Rechnung erneut zusenden"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Beschreibung
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optionale Beschreibung..."
+              rows={2}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Priorität
+              </label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="low">Niedrig</option>
+                <option value="medium">Mittel</option>
+                <option value="high">Hoch</option>
+                <option value="critical">Kritisch</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Fälligkeitsdatum
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Notizen
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optionale Notizen..."
+              rows={2}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>
+            Abbrechen
+          </Button>
+          <Button onClick={handleSubmit} disabled={creating || !title.trim()}>
+            {creating ? "Erstelle..." : "Aufgabe erstellen"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Single Task Row (shared across tabs)
 // ---------------------------------------------------------------------------
 function TaskRow({
@@ -1042,6 +1625,9 @@ function TaskRow({
   onStartSequence,
   onExecuteJira,
   onExecuteWebhook,
+  onSendWhatsApp,
+  onHealthCheck,
+  onChurnCheck,
 }: {
   task: Task;
   today: string;
@@ -1055,6 +1641,9 @@ function TaskRow({
   onStartSequence?: () => void;
   onExecuteJira?: () => void;
   onExecuteWebhook?: () => void;
+  onSendWhatsApp?: () => void;
+  onHealthCheck?: () => void;
+  onChurnCheck?: () => void;
 }) {
   const done = isDoneTask(task);
   const overdue = !done && task.due_date !== null && task.due_date < today;
@@ -1095,6 +1684,21 @@ function TaskRow({
             Auto
           </span>
         )}
+        {!done && task.effective_trigger_mode === "auto_on_due" && task.due_date && (() => {
+          const diffDays = Math.ceil(
+            (new Date(task.due_date).getTime() - new Date(today).getTime()) / 86400000
+          );
+          if (diffDays < 0) return null;
+          const label =
+            diffDays === 0 ? "triggert heute" :
+            diffDays === 1 ? "triggert morgen" :
+            `triggert in ${diffDays} Tagen`;
+          return (
+            <span className="ml-1 shrink-0 text-[11px] italic text-emerald-600">
+              {label}
+            </span>
+          );
+        })()}
         {!done && onSendEmail && (
           <Button variant="outline" size="sm" className="h-6 shrink-0 border-blue-300 bg-blue-50 px-2 text-xs text-blue-700 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); onSendEmail(); }}>
             Senden
@@ -1113,6 +1717,21 @@ function TaskRow({
         {!done && onExecuteWebhook && (
           <Button variant="outline" size="sm" className="h-6 shrink-0 border-violet-300 bg-violet-50 px-2 text-xs text-violet-700 hover:bg-violet-100" onClick={(e) => { e.stopPropagation(); onExecuteWebhook(); }}>
             Webhook
+          </Button>
+        )}
+        {!done && onSendWhatsApp && (
+          <Button variant="outline" size="sm" className="h-6 shrink-0 border-green-300 bg-green-50 px-2 text-xs text-green-700 hover:bg-green-100" onClick={(e) => { e.stopPropagation(); onSendWhatsApp(); }}>
+            WhatsApp
+          </Button>
+        )}
+        {!done && onHealthCheck && (
+          <Button variant="outline" size="sm" className="h-6 shrink-0 border-emerald-300 bg-emerald-50 px-2 text-xs text-emerald-700 hover:bg-emerald-100" onClick={(e) => { e.stopPropagation(); onHealthCheck(); }}>
+            Health-Check
+          </Button>
+        )}
+        {!done && onChurnCheck && (
+          <Button variant="outline" size="sm" className="h-6 shrink-0 border-amber-300 bg-amber-50 px-2 text-xs text-amber-700 hover:bg-amber-100" onClick={(e) => { e.stopPropagation(); onChurnCheck(); }}>
+            Churn-Check
           </Button>
         )}
         {task.due_date && (
@@ -1206,6 +1825,21 @@ function TaskRow({
                   Webhook ausführen
                 </Button>
               )}
+              {onSendWhatsApp && (
+                <Button variant="outline" size="sm" onClick={onSendWhatsApp}>
+                  WhatsApp senden
+                </Button>
+              )}
+              {onHealthCheck && (
+                <Button variant="outline" size="sm" onClick={onHealthCheck}>
+                  Health-Check ausfüllen
+                </Button>
+              )}
+              {onChurnCheck && (
+                <Button variant="outline" size="sm" onClick={onChurnCheck}>
+                  Churn-Check ausfüllen
+                </Button>
+              )}
               <Button size="sm" onClick={onComplete}>
                 Erledigt
               </Button>
@@ -1240,7 +1874,12 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
   const [jiraModalTask, setJiraModalTask] = useState<Task | null>(null);
   const [webhookModalTask, setWebhookModalTask] = useState<Task | null>(null);
   const [sequenceModalTask, setSequenceModalTask] = useState<Task | null>(null);
+  const [healthCheckModalTask, setHealthCheckModalTask] = useState<Task | null>(null);
+  const [churnCheckModalTask, setChurnCheckModalTask] = useState<Task | null>(null);
+  const [whatsAppModalTask, setWhatsAppModalTask] = useState<Task | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [hasEmailProvider, setHasEmailProvider] = useState<boolean | null>(null);
+  const [hasWhatsApp, setHasWhatsApp] = useState<boolean | null>(null);
   const [clientServiceTypeIds, setClientServiceTypeIds] = useState<string[]>([]);
 
   const fetchTasks = useCallback(async () => {
@@ -1267,6 +1906,9 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
     )
       .then((data) => setHasEmailProvider(data.has_active_provider))
       .catch(() => setHasEmailProvider(false));
+    apiFetch("/api/v1/integrations/whatsapp/connection/", { tenantId })
+      .then(() => setHasWhatsApp(true))
+      .catch(() => setHasWhatsApp(false));
   }, [tenantId]);
 
   // Client-Services laden für empfohlene Listen
@@ -1282,18 +1924,16 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
       .catch(() => {});
   }, [slug, tenantId]);
 
-  const today = todayStr();
-
   // --- Tab-Filter (Faellig und Onboarding sind NICHT exklusiv) ---
-  const dueTasks = allTasks.filter((t) => {
-    if (isDoneTask(t)) return false;
-    return !t.due_date || t.due_date <= today;
-  });
+  const dueTasks = allTasks.filter(
+    (t) => t.status === "open" || t.status === "in_progress"
+  );
 
-  const backlogTasks = allTasks.filter((t) => {
-    if (isDoneTask(t)) return false;
-    return t.due_date !== null && t.due_date > today;
-  });
+  const backlogTasks = allTasks.filter((t) => t.status === "planned");
+
+  const recurringTasks = allTasks.filter(
+    (t) => t.effective_trigger_mode === "auto_on_due" || t.source_list_id
+  );
 
   const onboardingTasks = allTasks.filter((t) =>
     ONBOARDING_GROUP_LABELS.includes(t.group_label) || ONBOARDING_PHASES.includes(t.phase)
@@ -1304,6 +1944,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
   const tabConfig: { key: TabKey; label: string; count: number }[] = [
     { key: "due", label: "Fällig", count: dueTasks.length },
     { key: "backlog", label: "Zukünftig", count: backlogTasks.length },
+    { key: "recurring", label: "Wiederkehrend", count: recurringTasks.length },
     { key: "onboarding", label: "Onboarding", count: onboardingTasks.length },
     { key: "done", label: "Erledigt", count: doneTasks.length },
   ];
@@ -1487,6 +2128,8 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
         return dueTasks;
       case "backlog":
         return backlogTasks;
+      case "recurring":
+        return recurringTasks;
       case "onboarding":
         return onboardingTasks;
       case "done":
@@ -1547,6 +2190,21 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
                     task.action_type === "webhook" &&
                     (task.action_template_slug || task.action_sequence_slug)
                       ? () => handleExecuteWebhook(task)
+                      : undefined
+                  }
+                  onSendWhatsApp={
+                    hasWhatsApp && task.action_type === "whatsapp"
+                      ? () => setWhatsAppModalTask(task)
+                      : undefined
+                  }
+                  onHealthCheck={
+                    task.action_type === "health_check"
+                      ? () => setHealthCheckModalTask(task)
+                      : undefined
+                  }
+                  onChurnCheck={
+                    task.action_type === "churn_check"
+                      ? () => setChurnCheckModalTask(task)
                       : undefined
                   }
                 />
@@ -1656,6 +2314,11 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
                             ? () => handleExecuteWebhook(task)
                             : undefined
                         }
+                        onSendWhatsApp={
+                          hasWhatsApp && task.action_type === "whatsapp"
+                            ? () => setWhatsAppModalTask(task)
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -1677,14 +2340,23 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Aufgaben</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowModal(true)}
-              disabled={generating}
-            >
-              {generating ? "Laden..." : "Aufgabenliste laden"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCreateModal(true)}
+              >
+                + Neue Aufgabe
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowModal(true)}
+                disabled={generating}
+              >
+                {generating ? "Laden..." : "Aufgabenliste laden"}
+              </Button>
+            </div>
           </div>
 
           {/* Active Lists */}
@@ -1766,7 +2438,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
               <p className="mt-1 text-sm text-yellow-700">
                 E-Mail-Aktionen sind deaktiviert.{" "}
                 <a
-                  href="/integrationen/email"
+                  href="/integrationen/nachrichten"
                   className="font-medium underline hover:text-yellow-900"
                 >
                   Jetzt konfigurieren →
@@ -1856,6 +2528,50 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
           tenantId={tenantId}
           onClose={() => setSequenceModalTask(null)}
           onStarted={fetchTasks}
+        />
+      )}
+
+      {/* Manual Task Create Modal */}
+      {showCreateModal && (
+        <ManualTaskCreateModal
+          slug={slug}
+          tenantId={tenantId}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={fetchTasks}
+        />
+      )}
+
+      {/* Health-Check Modal */}
+      {healthCheckModalTask && (
+        <HealthCheckModal
+          slug={slug}
+          taskId={healthCheckModalTask.id}
+          tenantId={tenantId}
+          onClose={() => setHealthCheckModalTask(null)}
+          onSubmitted={fetchTasks}
+        />
+      )}
+
+      {/* Churn-Check Modal */}
+      {churnCheckModalTask && (
+        <ChurnCheckModal
+          slug={slug}
+          taskId={churnCheckModalTask.id}
+          tenantId={tenantId}
+          onClose={() => setChurnCheckModalTask(null)}
+          onSubmitted={fetchTasks}
+        />
+      )}
+
+      {/* WhatsApp Send Modal */}
+      {whatsAppModalTask && (
+        <WhatsAppSendModal
+          slug={slug}
+          taskId={whatsAppModalTask.id}
+          taskTitle={whatsAppModalTask.title}
+          tenantId={tenantId}
+          onClose={() => setWhatsAppModalTask(null)}
+          onSent={fetchTasks}
         />
       )}
     </>

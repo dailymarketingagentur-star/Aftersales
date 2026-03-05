@@ -5,8 +5,10 @@ from apps.emails.models import (
     EmailProviderConnection,
     EmailSequence,
     EmailTemplate,
+    InboundEmail,
     SequenceEnrollment,
     SequenceStep,
+    WhatsAppMessage,
 )
 
 
@@ -24,6 +26,7 @@ class EmailProviderConnectionSerializer(serializers.ModelSerializer):
             "id", "provider_type", "label", "is_active",
             "smtp_host", "smtp_port", "smtp_username", "smtp_use_tls",
             "from_email", "from_name",
+            "inbound_parse_enabled", "inbound_parse_domain",
             "last_tested_at", "last_test_success", "last_test_message",
             "created_at", "updated_at",
         ]
@@ -46,6 +49,8 @@ class SendGridConnectionWriteSerializer(serializers.Serializer):
     sendgrid_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
     from_email = serializers.EmailField()
     from_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    inbound_parse_enabled = serializers.BooleanField(required=False, default=False)
+    inbound_parse_domain = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
 
 # ------------------------------------------------------------------
@@ -163,5 +168,40 @@ class SequenceEnrollmentSerializer(serializers.ModelSerializer):
             "id", "tenant", "sequence", "sequence_slug", "sequence_name",
             "recipient_email", "context", "status",
             "started_at", "completed_at", "current_step",
+            "created_at",
+        ]
+
+
+# ------------------------------------------------------------------
+# Inbound Email
+# ------------------------------------------------------------------
+
+
+class InboundEmailSerializer(serializers.ModelSerializer):
+    client_name = serializers.CharField(source="client.name", read_only=True, default=None)
+
+    class Meta:
+        model = InboundEmail
+        fields = [
+            "id", "from_email", "from_name", "to_email", "subject",
+            "body_text", "client", "client_name", "has_attachments",
+            "is_read", "is_assigned", "created_at",
+        ]
+
+
+# ------------------------------------------------------------------
+# WhatsApp Messages
+# ------------------------------------------------------------------
+
+
+class WhatsAppMessageSerializer(serializers.ModelSerializer):
+    client_name = serializers.CharField(source="client.name", read_only=True, default=None)
+
+    class Meta:
+        model = WhatsAppMessage
+        fields = [
+            "id", "wa_message_id", "direction", "from_number", "to_number",
+            "body_text", "message_type", "status",
+            "client", "client_name", "is_read", "metadata",
             "created_at",
         ]

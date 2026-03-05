@@ -113,9 +113,24 @@ TEMPLATES = [
             "<p>Hallo {{FIRST_NAME}},</p>"
             "<p>Sie sind jetzt seit 90 Tagen bei {{TENANT_NAME}}. "
             "Wie wahrscheinlich ist es, dass Sie uns weiterempfehlen wuerden?</p>"
-            '<p><a href="{{NPS_URL}}" style="display: inline-block; padding: 12px 24px; '
-            "background-color: #000; color: #fff; text-decoration: none; "
-            'border-radius: 6px;">Zur Umfrage (2 Min.)</a></p>'
+            '<table cellpadding="0" cellspacing="0" border="0" style="margin: 24px auto;">'
+            "<tr>"
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=1" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #dc2626; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">1</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=2" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #e04832; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">2</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=3" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #ea580c; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">3</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=4" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #d97706; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">4</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=5" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #eab308; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">5</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=6" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #a3b820; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">6</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=8" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #65a30d; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">8</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=9" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #16a34a; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">9</a></td>'
+            '<td style="padding: 0 3px;"><a href="{{NPS_URL}}?score=10" style="display: inline-block; width: 40px; height: 40px; line-height: 40px; text-align: center; background-color: #15803d; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">10</a></td>'
+            "</tr>"
+            "<tr>"
+            '<td colspan="3" style="text-align: left; font-size: 12px; color: #999; padding-top: 8px;">Unwahrscheinlich</td>'
+            '<td colspan="3"></td>'
+            '<td colspan="3" style="text-align: right; font-size: 12px; color: #999; padding-top: 8px;">Sehr wahrscheinlich</td>'
+            "</tr>"
+            "</table>"
             "<p>Ihr Feedback hilft uns, besser zu werden.</p>"
             "<p>Herzliche Gruesse,<br>Ihr {{TENANT_NAME}} Team</p>"
         ),

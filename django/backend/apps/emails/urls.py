@@ -9,6 +9,8 @@ from apps.emails.views import (
     EmailTemplateDetailView,
     EmailTemplateListCreateView,
     EnrollmentListView,
+    InboundEmailDetailView,
+    InboundEmailListView,
     SendEmailView,
     SendGridProviderActivateView,
     SendGridProviderTestView,
@@ -19,6 +21,8 @@ from apps.emails.views import (
     StartSequenceView,
     TrackClickView,
     TrackOpenView,
+    WhatsAppMessageDetailView,
+    WhatsAppMessageListView,
 )
 
 app_name = "emails"
@@ -49,4 +53,10 @@ urlpatterns = [
     path("providers/sendgrid/", SendGridProviderView.as_view(), name="provider-sendgrid"),
     path("providers/sendgrid/test/", SendGridProviderTestView.as_view(), name="provider-sendgrid-test"),
     path("providers/sendgrid/activate/", SendGridProviderActivateView.as_view(), name="provider-sendgrid-activate"),
+    # Inbound emails (authenticated)
+    path("inbound/", InboundEmailListView.as_view(), name="inbound-list"),
+    path("inbound/<uuid:pk>/", InboundEmailDetailView.as_view(), name="inbound-detail"),
+    # WhatsApp messages (authenticated)
+    path("whatsapp/", WhatsAppMessageListView.as_view(), name="whatsapp-list"),
+    path("whatsapp/<uuid:pk>/", WhatsAppMessageDetailView.as_view(), name="whatsapp-detail"),
 ]

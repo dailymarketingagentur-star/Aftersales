@@ -94,6 +94,10 @@ class TaskService:
             if reference_date and effective_day_offset is not None:
                 due_date = reference_date + timedelta(days=effective_day_offset)
 
+            # Tasks with future due_date start as "planned", others as "open"
+            today = date.today()
+            initial_status = Task.Status.PLANNED if (due_date and due_date > today) else Task.Status.OPEN
+
             task = Task.objects.create(
                 tenant=tenant,
                 client=client,
@@ -103,6 +107,7 @@ class TaskService:
                 action_type=tpl.action_type,
                 phase=tpl.phase,
                 priority=tpl.priority,
+                status=initial_status,
                 due_date=due_date,
                 email_template=tpl.email_template,
                 action_template=tpl.action_template,
@@ -379,6 +384,79 @@ class TaskService:
             )
             return {"success": True, "detail": "Webhook gestartet.", "execution_id": str(execution.pk)}
 
+        # --- WhatsApp ---
+        if action_type == "whatsapp":
+            from apps.clients.models import ClientPhoneNumber
+            from apps.integrations.models import WhatsAppConnection
+
+            conn = WhatsAppConnection.objects.filter(tenant=tenant, is_active=True).first()
+            if not conn:
+                return {"success": False, "detail": "Keine WhatsApp-Verbindung konfiguriert.", "execution_id": None}
+
+            # Get client phone number
+            phone = ClientPhoneNumber.objects.filter(client=client).first()
+            if not phone:
+                return {"success": False, "detail": "Mandant hat keine Telefonnummer.", "execution_id": None}
+
+            body_text = context.get("WHATSAPP_TEXT", f"Hallo {context.get('FIRST_NAME', client.name)}, hier ist eine Nachricht von {context.get('TENANT_NAME', '')}.")
+
+            try:
+                import requests as http_requests
+                from apps.emails.models import WhatsAppMessage, WhatsAppMessageDirection, WhatsAppMessageStatus
+
+                to_number = phone.number.lstrip("+")
+                token = conn.get_access_token()
+                resp = http_requests.post(
+                    f"https://graph.facebook.com/v21.0/{conn.phone_number_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "messaging_product": "whatsapp",
+                        "to": to_number,
+                        "type": "text",
+                        "text": {"body": body_text},
+                    },
+                    timeout=15,
+                )
+
+                if resp.status_code not in (200, 201):
+                    error_data = resp.json().get("error", {})
+                    return {"success": False, "detail": f"WhatsApp API Fehler: {error_data.get('message', resp.status_code)}", "execution_id": None}
+
+                resp_data = resp.json()
+                wa_message_id = None
+                messages = resp_data.get("messages", [])
+                if messages:
+                    wa_message_id = messages[0].get("id")
+
+                WhatsAppMessage.objects.create(
+                    tenant=tenant,
+                    wa_message_id=wa_message_id,
+                    direction=WhatsAppMessageDirection.OUTBOUND,
+                    from_number=conn.display_phone_number,
+                    to_number=phone.number,
+                    body_text=body_text,
+                    status=WhatsAppMessageStatus.SENT,
+                    client=client,
+                    metadata=resp_data,
+                )
+            except Exception as e:
+                return {"success": False, "detail": f"WhatsApp fehlgeschlagen: {e}", "execution_id": None}
+
+            ClientActivity.objects.create(
+                tenant=tenant, client=client, task=task,
+                activity_type=ClientActivity.ActivityType.WHATSAPP_SENT,
+                content=f"WhatsApp an {phone.number} gesendet (Auto-Trigger).",
+                author=user,
+            )
+            return {"success": True, "detail": "WhatsApp-Nachricht gesendet.", "execution_id": None}
+
+        # --- Health Check / Churn Check (require manual form submission) ---
+        if action_type in ("health_check", "churn_check"):
+            return {"success": False, "detail": "Erfordert manuelle Eingabe.", "execution_id": None}
+
         return {"success": False, "detail": f"Unbekannter action_type: {action_type}", "execution_id": None}
 
     # ------------------------------------------------------------------
@@ -402,7 +480,7 @@ class TaskService:
             tenant=tenant,
             client=client,
             source_list=task_list,
-            status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS],
+            status__in=[Task.Status.PLANNED, Task.Status.OPEN, Task.Status.IN_PROGRESS],
         )
         deleted_count = qs.count()
         qs.delete()

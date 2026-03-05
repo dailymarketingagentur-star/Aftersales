@@ -2,14 +2,22 @@ from django.urls import path
 
 from apps.clients.views import (
     CashflowPrognoseView,
+    ChurnAssessmentListView,
     ClientDetailView,
+    ClientEmailAddressDetailView,
+    ClientEmailAddressListCreateView,
     ClientKeyFactDetailView,
     ClientKeyFactListCreateView,
     ClientListCreateView,
+    ClientPhoneNumberDetailView,
+    ClientPhoneNumberListCreateView,
+    HealthAssessmentListView,
     ServiceDetailView,
     ServiceListCreateView,
+    SubmitChurnCheckView,
+    SubmitHealthCheckView,
 )
-from apps.integrations.views import ClientIntegrationDataListView, CreateJiraProjectView, SyncConfluencePageView
+from apps.integrations.views import ClientIntegrationDataListView, CreateJiraIssueView, CreateJiraProjectView, SyncConfluencePageView
 from apps.tasks.views import (
     ClientActivityListCreateView,
     ClientRemoveListView,
@@ -37,6 +45,12 @@ urlpatterns = [
     # Key Facts
     path("<slug:slug>/key-facts/", ClientKeyFactListCreateView.as_view(), name="key-fact-list-create"),
     path("<slug:slug>/key-facts/<uuid:pk>/", ClientKeyFactDetailView.as_view(), name="key-fact-detail"),
+    # Phone Numbers
+    path("<slug:slug>/phone-numbers/", ClientPhoneNumberListCreateView.as_view(), name="phone-number-list-create"),
+    path("<slug:slug>/phone-numbers/<uuid:pk>/", ClientPhoneNumberDetailView.as_view(), name="phone-number-detail"),
+    # Email Addresses
+    path("<slug:slug>/email-addresses/", ClientEmailAddressListCreateView.as_view(), name="email-address-list-create"),
+    path("<slug:slug>/email-addresses/<uuid:pk>/", ClientEmailAddressDetailView.as_view(), name="email-address-detail"),
     # Tasks
     path("<slug:slug>/tasks/", TaskListCreateView.as_view(), name="task-list-create"),
     path("<slug:slug>/tasks/generate/", TaskGenerateView.as_view(), name="task-generate"),
@@ -53,7 +67,13 @@ urlpatterns = [
     # Integration Data
     path("<slug:slug>/integrations/", ClientIntegrationDataListView.as_view(), name="client-integration-data"),
     path("<slug:slug>/integrations/jira/create-project/", CreateJiraProjectView.as_view(), name="client-jira-create-project"),
+    path("<slug:slug>/integrations/jira/create-issue/", CreateJiraIssueView.as_view(), name="client-jira-create-issue"),
     path("<slug:slug>/integrations/confluence/sync/", SyncConfluencePageView.as_view(), name="client-confluence-sync"),
+    # Health & Churn Assessments
+    path("<slug:slug>/tasks/<uuid:pk>/submit-health-check/", SubmitHealthCheckView.as_view(), name="submit-health-check"),
+    path("<slug:slug>/tasks/<uuid:pk>/submit-churn-check/", SubmitChurnCheckView.as_view(), name="submit-churn-check"),
+    path("<slug:slug>/health-assessments/", HealthAssessmentListView.as_view(), name="health-assessment-list"),
+    path("<slug:slug>/churn-assessments/", ChurnAssessmentListView.as_view(), name="churn-assessment-list"),
     # Activities / Timeline
     path("<slug:slug>/activities/", ClientActivityListCreateView.as_view(), name="activity-list-create"),
 ]

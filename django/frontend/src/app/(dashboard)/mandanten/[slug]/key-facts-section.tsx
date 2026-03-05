@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Pencil, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiFetch } from "@/lib/api";
 import type { ClientKeyFact } from "@/types/client";
 
@@ -22,6 +24,12 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
   const [editValue, setEditValue] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+
+  function showSuccess(msg: string) {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(""), 3000);
+  }
 
   useEffect(() => {
     if (!tenantId || !slug) return;
@@ -48,6 +56,7 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
       setNewLabel("");
       setNewValue("");
       setShowAdd(false);
+      showSuccess(`"${result.label}" hinzugefügt.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Fehler beim Hinzufügen.");
     } finally {
@@ -62,6 +71,7 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
         tenantId,
       });
       setKeyFacts((prev) => prev.filter((kf) => kf.id !== id));
+      showSuccess("Key-Fact gelöscht.");
     } catch {
       /* ignore */
     }
@@ -84,6 +94,7 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
       });
       setKeyFacts((prev) => prev.map((kf) => (kf.id === id ? result : kf)));
       setEditingId(null);
+      showSuccess(`"${editLabel.trim()}" aktualisiert.`);
     } catch {
       /* ignore */
     } finally {
@@ -100,8 +111,18 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
             {showAdd ? "Abbrechen" : "Hinzufügen"}
           </Button>
         </CardTitle>
+        {successMsg && <p className="text-sm text-green-600">{successMsg}</p>}
       </CardHeader>
       <CardContent>
+        <Alert className="mb-4">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Key-Facts sind wichtige Informationen zu diesem Mandanten (z.B. bevorzugte
+            Kommunikation, KPIs, Besonderheiten). Sie werden auch bei der
+            Confluence-Synchronisation auf die Mandanten-Seite übertragen.
+          </AlertDescription>
+        </Alert>
+
         {keyFacts.length === 0 && !showAdd && (
           <p className="text-sm text-muted-foreground">
             Noch keine Key-Facts hinterlegt. Klicken Sie auf &quot;Hinzufügen&quot;, um wichtige Kunden-Infos zu erfassen.
@@ -139,20 +160,24 @@ export function KeyFactsSection({ slug, tenantId }: KeyFactsSectionProps) {
                     <span className="text-muted-foreground">{kf.value}</span>
                   </div>
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => startEdit(kf)}
-                      className="text-muted-foreground hover:text-foreground"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
                       title="Bearbeiten"
+                      onClick={() => startEdit(kf)}
                     >
-                      ✎
-                    </button>
-                    <button
-                      onClick={() => handleDelete(kf.id)}
-                      className="text-muted-foreground hover:text-destructive"
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 hover:text-destructive"
                       title="Löschen"
+                      onClick={() => handleDelete(kf.id)}
                     >
-                      ✕
-                    </button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </>
               )}

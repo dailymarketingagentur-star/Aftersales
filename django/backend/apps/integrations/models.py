@@ -99,6 +99,55 @@ class TwilioConnection(TenantScopedModel):
 
 
 # ---------------------------------------------------------------------------
+# WhatsAppConnection — one active connection per tenant
+# ---------------------------------------------------------------------------
+class WhatsAppConnection(TenantScopedModel):
+    """Per-tenant WhatsApp Business API credentials. Access token is Fernet-encrypted."""
+
+    label = models.CharField(max_length=255, default="WhatsApp Business")
+    phone_number_id = models.CharField(
+        max_length=100,
+        help_text="Meta Phone Number ID (aus dem WhatsApp Business Dashboard).",
+    )
+    business_account_id = models.CharField(
+        max_length=100,
+        help_text="WhatsApp Business Account ID (WABA ID).",
+    )
+    access_token_encrypted = models.TextField(help_text="Fernet-encrypted Meta Access Token.")
+    webhook_verify_token = models.CharField(
+        max_length=255,
+        help_text="Verify-Token fuer Meta Webhook-Verifikation.",
+    )
+    display_phone_number = models.CharField(
+        max_length=20,
+        help_text="Anzeige-Nummer im E.164-Format, z.B. +4915112345678.",
+    )
+    is_active = models.BooleanField(default=True)
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    last_test_success = models.BooleanField(null=True, blank=True)
+
+    class Meta(TenantScopedModel.Meta):
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant"],
+                condition=models.Q(is_active=True),
+                name="unique_active_whatsapp_connection_per_tenant",
+            ),
+        ]
+
+    def __str__(self):
+        return f"[{self.tenant.name}] {self.label}"
+
+    def set_access_token(self, plaintext: str) -> None:
+        """Encrypt and store the access token."""
+        self.access_token_encrypted = encrypt_token(plaintext)
+
+    def get_access_token(self) -> str:
+        """Decrypt and return the access token."""
+        return decrypt_token(self.access_token_encrypted)
+
+
+# ---------------------------------------------------------------------------
 # ActionTemplate — reusable Jira API call template
 # ---------------------------------------------------------------------------
 class HttpMethod(models.TextChoices):
@@ -398,6 +447,11 @@ class TenantIntegration(TenantScopedModel):
 
     integration_type = models.CharField(max_length=50)
     is_enabled = models.BooleanField(default=True)
+    config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Integrationsspezifische Konfiguration (z.B. confluence_parent_page_id).",
+    )
     enabled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

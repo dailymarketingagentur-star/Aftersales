@@ -18,9 +18,10 @@ class NPSService:
 
     @staticmethod
     @transaction.atomic
-    def send_survey(*, tenant, client, campaign=None, task=None):
+    def send_survey(*, tenant, client, campaign=None, task=None, recipient_email=None):
         """Create an NPSSurvey with token and send the NPS email.
 
+        If recipient_email is provided, it overrides client.contact_email.
         Returns the NPSSurvey instance.
         """
         from apps.nps.models import NPSSurvey
@@ -53,10 +54,11 @@ class NPSService:
             template_slug = campaign.email_template.slug
 
         try:
+            actual_recipient = recipient_email or client.contact_email
             email_log = EmailService.send(
                 tenant=tenant,
                 template_slug=template_slug,
-                recipient_email=client.contact_email,
+                recipient_email=actual_recipient,
                 context=context,
                 idempotency_key=f"nps-survey-{survey.id}",
             )
@@ -73,6 +75,55 @@ class NPSService:
             token=str(survey.token),
         )
         return survey
+
+    @staticmethod
+    def preview_survey(*, tenant, client):
+        """Render the NPS email template without sending.
+
+        Returns dict with subject, body_html, default_email, available_emails.
+        """
+        frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+        survey_url = f"{frontend_url}/survey/00000000-0000-0000-0000-000000000000"
+
+        context = {
+            "NPS_URL": survey_url,
+            "FIRST_NAME": client.contact_first_name or (client.name.split()[0] if client.name else ""),
+            "LAST_NAME": client.contact_last_name or "",
+            "CLIENT_NAME": client.name,
+            "KUNDENNAME": client.name,
+            "FIRMENNAME": client.name,
+            "TENANT_NAME": tenant.name if tenant else "",
+        }
+
+        template_slug = "nps-review"
+        template = EmailService._resolve_template(tenant, template_slug)
+        if not template:
+            return {
+                "subject": "NPS-Umfrage",
+                "body_html": "<p>Kein E-Mail-Template 'nps-review' gefunden.</p>",
+                "default_email": client.contact_email or "",
+                "available_emails": [],
+            }
+
+        rendered_subject = EmailService._render(template.subject, context)
+        rendered_body = EmailService._render(template.body_html, context)
+
+        # Collect available email addresses
+        from apps.clients.models import ClientEmailAddress
+
+        email_entries = ClientEmailAddress.objects.filter(client=client).order_by("position")
+        available_emails = [{"email": e.email, "label": e.label} for e in email_entries]
+
+        # Add contact_email if not already in the list
+        if client.contact_email and not any(e["email"] == client.contact_email for e in available_emails):
+            available_emails.insert(0, {"email": client.contact_email, "label": "Hauptkontakt"})
+
+        return {
+            "subject": rendered_subject,
+            "body_html": rendered_body,
+            "default_email": client.contact_email or (available_emails[0]["email"] if available_emails else ""),
+            "available_emails": available_emails,
+        }
 
     @staticmethod
     @transaction.atomic

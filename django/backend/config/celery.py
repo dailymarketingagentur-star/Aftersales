@@ -23,6 +23,10 @@ app.conf.beat_schedule = {
         "task": "apps.nps.tasks.process_nps_campaigns",
         "schedule": crontab(hour=8, minute=0),  # Täglich um 08:00 Uhr
     },
+    "promote-planned-tasks": {
+        "task": "apps.tasks.tasks.promote_planned_tasks",
+        "schedule": crontab(hour=6, minute=55),  # Täglich um 06:55 Uhr
+    },
     "process-auto-trigger-tasks": {
         "task": "apps.tasks.tasks.process_auto_trigger_tasks",
         "schedule": crontab(minute="*/15"),  # Alle 15 Minuten

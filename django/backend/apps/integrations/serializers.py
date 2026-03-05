@@ -10,6 +10,7 @@ from apps.integrations.models import (
     StepLog,
     TenantIntegration,
     TwilioConnection,
+    WhatsAppConnection,
 )
 from apps.integrations.config_copy_service import COPYABLE_TYPES
 from apps.integrations.registry import INTEGRATION_TYPES, get_field_keys, get_valid_keys
@@ -103,6 +104,49 @@ class TwilioConnectionWriteSerializer(serializers.Serializer):
         if not re.match(r"^\+[1-9]\d{1,14}$", value):
             raise serializers.ValidationError("Telefonnummer muss im E.164-Format sein (z.B. +4930123456).")
         return value
+
+
+# ---------------------------------------------------------------------------
+# WhatsAppConnection
+# ---------------------------------------------------------------------------
+class WhatsAppConnectionSerializer(serializers.ModelSerializer):
+    """Read serializer — never exposes the encrypted access token."""
+
+    class Meta:
+        model = WhatsAppConnection
+        fields = [
+            "id",
+            "label",
+            "phone_number_id",
+            "business_account_id",
+            "webhook_verify_token",
+            "display_phone_number",
+            "is_active",
+            "last_tested_at",
+            "last_test_success",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "last_tested_at", "last_test_success", "created_at", "updated_at"]
+
+
+class WhatsAppConnectionWriteSerializer(serializers.Serializer):
+    """Write serializer for creating/updating a WhatsApp connection."""
+
+    label = serializers.CharField(max_length=255, required=False, default="WhatsApp Business")
+    phone_number_id = serializers.CharField(max_length=100)
+    business_account_id = serializers.CharField(max_length=100)
+    access_token = serializers.CharField(write_only=True)
+    webhook_verify_token = serializers.CharField(max_length=255)
+    display_phone_number = serializers.CharField(max_length=20)
+
+
+class WhatsAppSendMessageSerializer(serializers.Serializer):
+    """Input for sending a WhatsApp message."""
+
+    to_number = serializers.CharField(max_length=20)
+    body_text = serializers.CharField()
+    client_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 # ---------------------------------------------------------------------------
@@ -475,3 +519,10 @@ class CreateJiraProjectSerializer(serializers.Serializer):
                 "Projekt-Key muss mit einem Großbuchstaben beginnen, nur Großbuchstaben und Ziffern enthalten und 2-10 Zeichen lang sein."
             )
         return value
+
+
+class CreateJiraIssueSerializer(serializers.Serializer):
+    """Input for creating a Jira issue in an existing project."""
+
+    summary = serializers.CharField(max_length=255)
+    issue_type_id = serializers.CharField(max_length=50, required=False, default="")

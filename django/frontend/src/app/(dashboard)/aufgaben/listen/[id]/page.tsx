@@ -19,6 +19,7 @@ const ACTION_LABELS: Record<string, string> = {
   document: "Dokument",
   jira_project: "Jira-Projekt",
   jira_ticket: "Jira-Ticket",
+  whatsapp: "WhatsApp",
   manual: "Manuell",
 };
 

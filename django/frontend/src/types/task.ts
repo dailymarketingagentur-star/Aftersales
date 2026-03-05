@@ -8,13 +8,15 @@ export type ActionType =
   | "jira_project"
   | "jira_ticket"
   | "webhook"
+  | "health_check"
+  | "churn_check"
   | "manual";
 
 export type TriggerMode = "manual" | "auto_on_due";
 
 export type TaskPriority = "low" | "medium" | "high" | "critical";
 
-export type TaskStatus = "open" | "in_progress" | "completed" | "skipped";
+export type TaskStatus = "planned" | "open" | "in_progress" | "completed" | "skipped";
 
 export interface Subtask {
   id: string;
@@ -38,6 +40,22 @@ export interface EmailPreview {
   subject: string;
   body_html: string;
   recipient_email: string;
+}
+
+export interface DashboardTask {
+  id: string;
+  title: string;
+  client: string;
+  client_name: string;
+  client_slug: string;
+  due_date: string | null;
+  priority: TaskPriority;
+  action_type: ActionType;
+  status: TaskStatus;
+  phase: number;
+  assigned_to: string | null;
+  assigned_to_email: string | null;
+  created_at: string;
 }
 
 export interface Task {
@@ -157,7 +175,9 @@ export type ActivityType =
   | "nps_received"
   | "auto_trigger_success"
   | "auto_trigger_failed"
-  | "list_removed";
+  | "list_removed"
+  | "health_check_completed"
+  | "churn_check_completed";
 
 export interface ClientActivity {
   id: string;

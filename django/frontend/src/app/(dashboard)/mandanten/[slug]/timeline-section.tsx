@@ -26,6 +26,13 @@ const TYPE_COLORS: Record<ActivityType, string> = {
   jira_executed: "bg-indigo-100 text-indigo-700",
 };
 
+interface PaginatedResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: ClientActivity[];
+}
+
 interface TimelineSectionProps {
   slug: string;
   tenantId: string;
@@ -35,21 +42,31 @@ export function TimelineSection({ slug, tenantId }: TimelineSectionProps) {
   const [activities, setActivities] = useState<ClientActivity[]>([]);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchActivities = useCallback(async () => {
+  const fetchActivities = useCallback(async (pageNum: number, append: boolean) => {
     try {
-      const data = await apiFetch<ClientActivity[]>(
-        `/api/v1/clients/${slug}/activities/`,
+      if (append) setLoadingMore(true);
+      const data = await apiFetch<PaginatedResponse>(
+        `/api/v1/clients/${slug}/activities/?page=${pageNum}`,
         { tenantId }
       );
-      setActivities(data);
+      setActivities((prev) => append ? [...prev, ...data.results] : data.results);
+      setHasMore(data.next !== null);
+      setTotalCount(data.count);
+      setPage(pageNum);
     } catch {
       /* ignore */
+    } finally {
+      setLoadingMore(false);
     }
   }, [slug, tenantId]);
 
   useEffect(() => {
-    fetchActivities();
+    fetchActivities(1, false);
   }, [fetchActivities]);
 
   async function handleSubmitComment(e: React.FormEvent) {
@@ -63,7 +80,8 @@ export function TimelineSection({ slug, tenantId }: TimelineSectionProps) {
         tenantId,
       });
       setComment("");
-      fetchActivities();
+      // Reload von Seite 1 nach neuem Kommentar
+      fetchActivities(1, false);
     } catch {
       /* ignore */
     } finally {
@@ -74,7 +92,14 @@ export function TimelineSection({ slug, tenantId }: TimelineSectionProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Aktivitäten</CardTitle>
+        <CardTitle>
+          Aktivitäten
+          {totalCount > 0 && (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              ({totalCount})
+            </span>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {/* Comment input */}
@@ -102,9 +127,9 @@ export function TimelineSection({ slug, tenantId }: TimelineSectionProps) {
               <div key={activity.id} className="flex gap-3 border-b pb-3 last:border-0">
                 {/* Type badge */}
                 <span
-                  className={`mt-0.5 h-fit shrink-0 rounded px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[activity.activity_type]}`}
+                  className={`mt-0.5 h-fit shrink-0 rounded px-2 py-0.5 text-xs font-medium ${TYPE_COLORS[activity.activity_type] || "bg-gray-100 text-gray-600"}`}
                 >
-                  {TYPE_LABELS[activity.activity_type]}
+                  {TYPE_LABELS[activity.activity_type] || activity.activity_type}
                 </span>
 
                 {/* Content */}
@@ -122,6 +147,20 @@ export function TimelineSection({ slug, tenantId }: TimelineSectionProps) {
                 </div>
               </div>
             ))}
+
+            {/* Load more */}
+            {hasMore && (
+              <div className="pt-2 text-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingMore}
+                  onClick={() => fetchActivities(page + 1, true)}
+                >
+                  {loadingMore ? "Laden..." : "Mehr laden"}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

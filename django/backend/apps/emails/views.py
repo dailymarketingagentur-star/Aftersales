@@ -1,4 +1,6 @@
 import base64
+import logging
+from email.utils import parseaddr
 from urllib.parse import unquote
 
 from django.db import models as db_models
@@ -6,6 +8,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.generics import ListAPIView
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,7 +19,9 @@ from apps.emails.models import (
     EmailProviderType,
     EmailSequence,
     EmailTemplate,
+    InboundEmail,
     SequenceEnrollment,
+    WhatsAppMessage,
 )
 from apps.emails.provider_service import EmailProviderService
 from apps.emails.serializers import (
@@ -26,11 +31,13 @@ from apps.emails.serializers import (
     EmailTemplateCreateSerializer,
     EmailTemplateSerializer,
     EmailTemplateUpdateSerializer,
+    InboundEmailSerializer,
     SendEmailSerializer,
     SendGridConnectionWriteSerializer,
     SequenceEnrollmentSerializer,
     SmtpConnectionWriteSerializer,
     StartSequenceSerializer,
+    WhatsAppMessageSerializer,
 )
 from apps.emails.services import EmailService
 
@@ -401,6 +408,8 @@ class SendGridProviderView(_BaseProviderView):
     def _apply_provider_fields(self, conn, data):
         if data.get("sendgrid_api_key"):
             conn.set_sendgrid_api_key(data["sendgrid_api_key"])
+        conn.inbound_parse_enabled = data.get("inbound_parse_enabled", False)
+        conn.inbound_parse_domain = data.get("inbound_parse_domain", "")
 
 
 class _BaseProviderTestView(APIView):
@@ -461,3 +470,177 @@ class SmtpProviderActivateView(_BaseProviderActivateView):
 
 class SendGridProviderActivateView(_BaseProviderActivateView):
     provider_type = EmailProviderType.SENDGRID
+
+
+# ------------------------------------------------------------------
+# Inbound Parse (SendGrid webhook + authenticated inbox)
+# ------------------------------------------------------------------
+
+
+class SendGridInboundWebhookView(APIView):
+    """Public webhook endpoint for SendGrid Inbound Parse.
+
+    URL contains tenant UUID for routing — no auth required (like TrackOpenView).
+    """
+
+    permission_classes = []
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, tenant_id):
+        from apps.tenants.models import Tenant
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, is_active=True)
+        except Tenant.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # Check if inbound parse is enabled for this tenant
+        conn = EmailProviderConnection.objects.filter(
+            tenant=tenant,
+            provider_type=EmailProviderType.SENDGRID,
+            inbound_parse_enabled=True,
+        ).first()
+        if not conn:
+            logger.warning("Inbound webhook called for tenant %s but inbound parse not enabled", tenant_id)
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        # Extract fields from SendGrid POST
+        from_raw = request.data.get("from", "")
+        from_name, from_email = parseaddr(from_raw)
+        to_email = request.data.get("to", "")
+        subject = request.data.get("subject", "")[:500]
+        body_text = request.data.get("text", "")
+        attachment_count = int(request.data.get("attachments", 0))
+
+        if not from_email:
+            return Response({"detail": "Missing from address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Client matching: try ClientEmailAddress first, then contact_email
+        from apps.clients.models import Client, ClientEmailAddress
+
+        client = None
+        email_match = ClientEmailAddress.objects.filter(
+            tenant=tenant, email__iexact=from_email,
+        ).select_related("client").first()
+        if email_match:
+            client = email_match.client
+        else:
+            client = Client.objects.filter(tenant=tenant, contact_email__iexact=from_email).first()
+
+        is_assigned = client is not None
+
+        InboundEmail.objects.create(
+            tenant=tenant,
+            from_email=from_email,
+            from_name=from_name,
+            to_email=to_email,
+            subject=subject,
+            body_text=body_text,
+            client=client,
+            has_attachments=attachment_count > 0,
+            is_read=False,
+            is_assigned=is_assigned,
+        )
+
+        return Response(status=status.HTTP_200_OK)
+
+
+class InboundEmailListView(ListAPIView):
+    """Authenticated list of inbound emails for the current tenant."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+    serializer_class = InboundEmailSerializer
+
+    def get_queryset(self):
+        qs = InboundEmail.objects.filter(tenant=self.request.tenant).select_related("client")
+        assigned = self.request.query_params.get("assigned")
+        if assigned == "true":
+            qs = qs.filter(is_assigned=True)
+        elif assigned == "false":
+            qs = qs.filter(is_assigned=False)
+        client_id = self.request.query_params.get("client")
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        return qs
+
+
+class InboundEmailDetailView(APIView):
+    """GET single inbound email (marks as read), PATCH to toggle is_read."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def get(self, request, pk):
+        try:
+            email = InboundEmail.objects.select_related("client").get(id=pk, tenant=request.tenant)
+        except InboundEmail.DoesNotExist:
+            return Response({"detail": "Nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        if not email.is_read:
+            email.is_read = True
+            email.save(update_fields=["is_read", "updated_at"])
+        return Response(InboundEmailSerializer(email).data)
+
+    def patch(self, request, pk):
+        try:
+            email = InboundEmail.objects.get(id=pk, tenant=request.tenant)
+        except InboundEmail.DoesNotExist:
+            return Response({"detail": "Nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        if "is_read" in request.data:
+            email.is_read = bool(request.data["is_read"])
+            email.save(update_fields=["is_read", "updated_at"])
+        return Response(InboundEmailSerializer(email).data)
+
+
+# ------------------------------------------------------------------
+# WhatsApp Messages (authenticated inbox)
+# ------------------------------------------------------------------
+
+
+class WhatsAppMessageListView(ListAPIView):
+    """Authenticated list of WhatsApp messages for the current tenant."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+    serializer_class = WhatsAppMessageSerializer
+
+    def get_queryset(self):
+        qs = WhatsAppMessage.objects.filter(tenant=self.request.tenant).select_related("client")
+        direction = self.request.query_params.get("direction")
+        if direction in ("inbound", "outbound"):
+            qs = qs.filter(direction=direction)
+        client_id = self.request.query_params.get("client")
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        is_read = self.request.query_params.get("is_read")
+        if is_read == "true":
+            qs = qs.filter(is_read=True)
+        elif is_read == "false":
+            qs = qs.filter(is_read=False)
+        return qs
+
+
+class WhatsAppMessageDetailView(APIView):
+    """GET single WhatsApp message (marks as read), PATCH to toggle is_read."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def get(self, request, pk):
+        try:
+            msg = WhatsAppMessage.objects.select_related("client").get(id=pk, tenant=request.tenant)
+        except WhatsAppMessage.DoesNotExist:
+            return Response({"detail": "Nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        if not msg.is_read:
+            msg.is_read = True
+            msg.save(update_fields=["is_read", "updated_at"])
+        return Response(WhatsAppMessageSerializer(msg).data)
+
+    def patch(self, request, pk):
+        try:
+            msg = WhatsAppMessage.objects.get(id=pk, tenant=request.tenant)
+        except WhatsAppMessage.DoesNotExist:
+            return Response({"detail": "Nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        if "is_read" in request.data:
+            msg.is_read = bool(request.data["is_read"])
+            msg.save(update_fields=["is_read", "updated_at"])
+        return Response(WhatsAppMessageSerializer(msg).data)

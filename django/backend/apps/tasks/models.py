@@ -26,6 +26,9 @@ class TaskTemplate(TimestampedModel):
         JIRA_PROJECT = "jira_project", "Jira-Projekt"
         JIRA_TICKET = "jira_ticket", "Jira-Ticket"
         WEBHOOK = "webhook", "Webhook"
+        HEALTH_CHECK = "health_check", "Health-Check"
+        CHURN_CHECK = "churn_check", "Churn-Check"
+        WHATSAPP = "whatsapp", "WhatsApp"
         MANUAL = "manual", "Manuell"
 
     class Priority(models.TextChoices):
@@ -143,6 +146,7 @@ class Task(TenantScopedModel):
     """A concrete task instance linked to a client."""
 
     class Status(models.TextChoices):
+        PLANNED = "planned", "Geplant"
         OPEN = "open", "Offen"
         IN_PROGRESS = "in_progress", "In Bearbeitung"
         COMPLETED = "completed", "Erledigt"
@@ -406,6 +410,9 @@ class ClientActivity(TenantScopedModel):
         AUTO_TRIGGER_SUCCESS = "auto_trigger_success", "Auto-Trigger erfolgreich"
         AUTO_TRIGGER_FAILED = "auto_trigger_failed", "Auto-Trigger fehlgeschlagen"
         LIST_REMOVED = "list_removed", "Aufgabenliste entfernt"
+        HEALTH_CHECK_COMPLETED = "health_check_completed", "Health-Check ausgefuellt"
+        CHURN_CHECK_COMPLETED = "churn_check_completed", "Churn-Check ausgefuellt"
+        WHATSAPP_SENT = "whatsapp_sent", "WhatsApp gesendet"
 
     client = models.ForeignKey(
         "clients.Client",

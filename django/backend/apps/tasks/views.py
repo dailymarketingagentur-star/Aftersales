@@ -1,8 +1,10 @@
 from datetime import timedelta
 
+from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -30,6 +32,7 @@ from apps.tasks.serializers import (
     RecurringTaskScheduleSerializer,
     SubtaskSerializer,
     TaskCreateSerializer,
+    TaskDashboardSerializer,
     TaskEmailPreviewSerializer,
     TaskListCreateSerializer,
     TaskListReorderSerializer,
@@ -67,6 +70,51 @@ def _build_client_context(client, tenant):
         "FIRMENNAME": client.name,
         "TENANT_NAME": tenant.name if tenant else "",
     }
+
+
+# ---------------------------------------------------------------------------
+# Dashboard — /api/v1/tasks/dashboard/
+# ---------------------------------------------------------------------------
+class TaskDashboardView(APIView):
+    """Aufgaben ueber alle Clients eines Tenants (fuer Dashboard)."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def get(self, request):
+        from django.db.models import Case, Value, When
+
+        qs = (
+            Task.objects.filter(tenant=request.tenant)
+            .select_related("client", "assigned_to")
+        )
+
+        # Filter: ?status=open,in_progress
+        status_param = request.query_params.get("status")
+        if status_param:
+            statuses = [s.strip() for s in status_param.split(",") if s.strip()]
+            qs = qs.filter(status__in=statuses)
+
+        # Filter: ?due_date=today|future
+        due_date_param = request.query_params.get("due_date")
+        if due_date_param == "today":
+            qs = qs.filter(due_date=timezone.localdate())
+        elif due_date_param == "future":
+            qs = qs.filter(due_date__gt=timezone.localdate())
+
+        # Sortierung: due_date ASC (nulls last), dann Priority
+        priority_order = Case(
+            When(priority="critical", then=Value(0)),
+            When(priority="high", then=Value(1)),
+            When(priority="medium", then=Value(2)),
+            When(priority="low", then=Value(3)),
+        )
+        qs = qs.order_by(
+            models.F("due_date").asc(nulls_last=True),
+            priority_order,
+        )
+
+        serializer = TaskDashboardSerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 # ---------------------------------------------------------------------------
@@ -1201,6 +1249,14 @@ class ClientActivityListCreateView(APIView):
         activity_type = request.query_params.get("type")
         if activity_type:
             qs = qs.filter(activity_type=activity_type)
+
+        # Pagination: wenn ?page= angegeben, paginiert zurückgeben
+        if "page" in request.query_params:
+            paginator = PageNumberPagination()
+            paginator.page_size = 50
+            page = paginator.paginate_queryset(qs, request)
+            serializer = ClientActivitySerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
         serializer = ClientActivitySerializer(qs, many=True)
         return Response(serializer.data)

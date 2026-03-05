@@ -10,13 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { apiFetch } from "@/lib/api";
 import { useTenant } from "@/hooks/use-tenant";
 import type { Client } from "@/types/client";
-import { CallButton } from "@/components/twilio/call-button";
-import { AudioSettingsPanel } from "@/components/twilio/audio-settings";
+import type { InboundEmail, WhatsAppMessage } from "@/types/email";
+import { ContactInfoSection } from "./contact-info-section";
 import { IntegrationSection } from "./integration-section";
 import { KeyFactsSection } from "./key-facts-section";
 import { NPSSection } from "./nps-section";
+import { ScoreOverviewSection } from "./score-overview-section";
 import { TaskSection } from "./task-section";
-import { TimelineSection } from "./timeline-section";
 
 const STATUS_OPTIONS = [
   { value: "active", label: "Aktiv" },
@@ -44,17 +44,15 @@ export default function MandantDetailPage() {
     name: "",
     contact_first_name: "",
     contact_last_name: "",
-    contact_email: "",
-    contact_phone: "",
     website: "",
     start_date: "",
     cloud_storage_url: "",
     status: "onboarding",
-    health_score: 100,
     notes: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   const fetchClient = useCallback(async () => {
     if (!currentTenantId || !slug) return;
@@ -65,13 +63,10 @@ export default function MandantDetailPage() {
         name: data.name,
         contact_first_name: data.contact_first_name,
         contact_last_name: data.contact_last_name,
-        contact_email: data.contact_email,
-        contact_phone: data.contact_phone,
         website: data.website,
         start_date: data.start_date || "",
         cloud_storage_url: data.cloud_storage_url,
         status: data.status,
-        health_score: data.health_score,
         notes: data.notes,
       });
     } catch {
@@ -83,6 +78,29 @@ export default function MandantDetailPage() {
     fetchClient();
   }, [fetchClient]);
 
+  // Fetch unread message count for badge (emails + WhatsApp, client-specific + unassigned)
+  useEffect(() => {
+    if (!currentTenantId || !client) return;
+    Promise.all([
+      apiFetch<{ count: number; results: InboundEmail[] }>(
+        `/api/v1/emails/inbound/?client=${client.id}`, { tenantId: currentTenantId }
+      ),
+      apiFetch<{ count: number; results: InboundEmail[] }>(
+        "/api/v1/emails/inbound/?assigned=false", { tenantId: currentTenantId }
+      ),
+      apiFetch<{ count: number; results: WhatsAppMessage[] }>(
+        `/api/v1/emails/whatsapp/?client=${client.id}`, { tenantId: currentTenantId }
+      ).catch(() => ({ count: 0, results: [] as WhatsAppMessage[] })),
+    ])
+      .then(([clientEmails, unassignedEmails, waData]) => {
+        const allEmails = [...clientEmails.results, ...unassignedEmails.results];
+        const unreadEmails = allEmails.filter((e) => !e.is_read).length;
+        const unreadWa = waData.results.filter((w) => !w.is_read).length;
+        setUnreadMessageCount(unreadEmails + unreadWa);
+      })
+      .catch(() => setUnreadMessageCount(0));
+  }, [currentTenantId, client]);
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!currentTenantId || !slug) return;
@@ -92,7 +110,6 @@ export default function MandantDetailPage() {
       const payload = {
         ...form,
         start_date: form.start_date || null,
-        health_score: Number(form.health_score),
       };
       await apiFetch(`/api/v1/clients/${slug}/`, {
         method: "PATCH",
@@ -135,11 +152,23 @@ export default function MandantDetailPage() {
             {TIER_LABELS[client.tier] || client.tier} &middot; Monatsvolumen{" "}
             {Number(client.monthly_volume).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
           </p>
+          <div className="mt-2 flex gap-2">
+            <Link href={`/mandanten/${slug}/services`}>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white">Services</Button>
+            </Link>
+            <Link href={`/integrationen/nachrichten/posteingang?client=${client.id}&slug=${slug}`}>
+              <Button className="relative bg-blue-600 hover:bg-blue-700 text-white">
+                Posteingang
+                {unreadMessageCount > 0 && (
+                  <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white animate-pulse">
+                    {unreadMessageCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          </div>
         </div>
         <div className="flex gap-2">
-          <Link href={`/mandanten/${slug}/services`}>
-            <Button variant="outline">Services</Button>
-          </Link>
           <Button variant="outline" onClick={() => setEditing(!editing)}>
             {editing ? "Abbrechen" : "Bearbeiten"}
           </Button>
@@ -183,14 +212,6 @@ export default function MandantDetailPage() {
                   <Label htmlFor="cln">Nachname</Label>
                   <Input id="cln" value={form.contact_last_name} onChange={(e) => setForm({ ...form, contact_last_name: e.target.value })} />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cemail">E-Mail</Label>
-                  <Input id="cemail" type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cphone">Telefon</Label>
-                  <Input id="cphone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} />
-                </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="website">Website</Label>
                   <Input id="website" type="url" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
@@ -202,10 +223,6 @@ export default function MandantDetailPage() {
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="cloud_storage_url">Cloud-Speicher</Label>
                   <Input id="cloud_storage_url" type="text" placeholder="https://drive.google.com/..." value={form.cloud_storage_url} onChange={(e) => setForm({ ...form, cloud_storage_url: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="health_score">Health Score</Label>
-                  <Input id="health_score" type="number" min={0} max={100} value={form.health_score} onChange={(e) => setForm({ ...form, health_score: Number(e.target.value) })} />
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="notes">Notizen</Label>
@@ -226,24 +243,6 @@ export default function MandantDetailPage() {
               <div>
                 <dt className="text-muted-foreground">Kontakt</dt>
                 <dd>{client.contact_first_name} {client.contact_last_name}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">E-Mail</dt>
-                <dd>{client.contact_email || "\u2014"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Telefon</dt>
-                <dd>
-                  {client.contact_phone ? (
-                    <>
-                      <CallButton
-                        phoneNumber={client.contact_phone}
-                        contactName={`${client.contact_first_name} ${client.contact_last_name}`}
-                      />
-                      <AudioSettingsPanel />
-                    </>
-                  ) : "\u2014"}
-                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Website</dt>
@@ -275,7 +274,21 @@ export default function MandantDetailPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground">Health Score</dt>
-                <dd>{client.health_score}</dd>
+                <dd>
+                  <span className={`font-semibold ${
+                    client.health_score >= 24 ? "text-green-600" :
+                    client.health_score >= 18 ? "text-yellow-600" :
+                    "text-red-600"
+                  }`}>
+                    {client.health_score}/35
+                  </span>
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({client.health_score >= 30 ? "Exzellent" :
+                      client.health_score >= 24 ? "Gut" :
+                      client.health_score >= 18 ? "Neutral" :
+                      client.health_score >= 12 ? "Risiko" : "Kritisch"})
+                  </span>
+                </dd>
               </div>
               {client.notes && (
                 <div className="col-span-2">
@@ -290,11 +303,28 @@ export default function MandantDetailPage() {
 
       {currentTenantId && (
         <>
+          <ContactInfoSection
+            slug={slug}
+            tenantId={currentTenantId}
+            contactName={`${client.contact_first_name} ${client.contact_last_name}`}
+          />
           <KeyFactsSection slug={slug} tenantId={currentTenantId} />
           <IntegrationSection slug={slug} tenantId={currentTenantId} clientName={client.name} />
           <NPSSection slug={slug} tenantId={currentTenantId} clientId={client.id} />
+          <ScoreOverviewSection
+            slug={slug}
+            tenantId={currentTenantId}
+            healthScore={client.health_score}
+            churnWarningCount={client.churn_warning_count}
+            lastHealthAt={client.last_health_assessment_at}
+            lastChurnAt={client.last_churn_assessment_at}
+          />
           <TaskSection slug={slug} tenantId={currentTenantId} />
-          <TimelineSection slug={slug} tenantId={currentTenantId} />
+          <div className="flex justify-end">
+            <Link href={`/mandanten/${slug}/aktivitaeten`}>
+              <Button variant="outline">Aktivitäten anzeigen &rarr;</Button>
+            </Link>
+          </div>
         </>
       )}
     </div>

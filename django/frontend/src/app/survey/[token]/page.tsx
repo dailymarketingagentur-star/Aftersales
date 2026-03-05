@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 interface SurveyData {
   tenant_name: string;
@@ -40,6 +40,7 @@ function getThankYouMessage(segment: string): string {
 
 export default function SurveyPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const token = params.token as string;
 
   const [surveyData, setSurveyData] = useState<SurveyData | null>(null);
@@ -52,6 +53,16 @@ export default function SurveyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [resultSegment, setResultSegment] = useState("");
+
+  // Kundenstimme (post-submit comment)
+  const [testimonialComment, setTestimonialComment] = useState("");
+  const [testimonialSubmitting, setTestimonialSubmitting] = useState(false);
+  const [testimonialSubmitted, setTestimonialSubmitted] = useState(false);
+  const [testimonialError, setTestimonialError] = useState("");
+
+  // Auto-submit: Score aus URL lesen
+  const urlScore = searchParams.get("score");
+  const [autoSubmitDone, setAutoSubmitDone] = useState(false);
 
   const fetchSurvey = useCallback(async () => {
     try {
@@ -72,6 +83,47 @@ export default function SurveyPage() {
   useEffect(() => {
     fetchSurvey();
   }, [fetchSurvey]);
+
+  // Auto-Submit wenn ?score=X in URL und Survey geladen
+  useEffect(() => {
+    if (autoSubmitDone || !surveyData || submitted || submitting) return;
+    if (!urlScore) return;
+
+    const score = parseInt(urlScore, 10);
+    if (isNaN(score) || score < 0 || score > 10) return;
+
+    // Survey muss beantwortbar sein
+    if (surveyData.is_expired || surveyData.is_responded) return;
+
+    setAutoSubmitDone(true);
+    setSelectedScore(score);
+
+    // Sofort submitten (ohne Kommentar)
+    (async () => {
+      setSubmitting(true);
+      try {
+        const res = await fetch(`/api/v1/nps/public/${token}/respond/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ score }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.detail || "Fehler beim Absenden.");
+          return;
+        }
+
+        const data = await res.json();
+        setResultSegment(data.segment);
+        setSubmitted(true);
+      } catch {
+        setError("Fehler beim Absenden.");
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+  }, [surveyData, urlScore, autoSubmitDone, submitted, submitting, token]);
 
   async function handleSubmit() {
     if (selectedScore === null) return;
@@ -101,7 +153,33 @@ export default function SurveyPage() {
     }
   }
 
-  if (loading) {
+  async function handleTestimonialSubmit() {
+    if (!testimonialComment.trim()) return;
+    setTestimonialSubmitting(true);
+    setTestimonialError("");
+
+    try {
+      const res = await fetch(`/api/v1/nps/public/${token}/comment/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comment: testimonialComment }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setTestimonialError(data.detail || "Fehler beim Speichern.");
+        return;
+      }
+
+      setTestimonialSubmitted(true);
+    } catch {
+      setTestimonialError("Fehler beim Speichern.");
+    } finally {
+      setTestimonialSubmitting(false);
+    }
+  }
+
+  if (loading || (urlScore && !autoSubmitDone && !error)) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Laden...</p>
@@ -120,8 +198,8 @@ export default function SurveyPage() {
 
   if (!surveyData) return null;
 
-  // Already responded
-  if (surveyData.is_responded) {
+  // Already responded (ohne Auto-Submit)
+  if (surveyData.is_responded && !submitted) {
     return (
       <div className="text-center py-12">
         <h1 className="text-2xl font-bold mb-2">Bereits beantwortet</h1>
@@ -140,7 +218,26 @@ export default function SurveyPage() {
     );
   }
 
-  // Thank you page
+  // Auto-submit in progress
+  if (submitting && urlScore) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Wird gesendet...</p>
+      </div>
+    );
+  }
+
+  // Error during auto-submit
+  if (error && urlScore && !submitted) {
+    return (
+      <div className="text-center py-12">
+        <h1 className="text-2xl font-bold mb-2">Fehler</h1>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  // Thank you page (with optional Kundenstimme textarea)
   if (submitted) {
     return (
       <div className="text-center py-12 space-y-4">
@@ -151,11 +248,41 @@ export default function SurveyPage() {
         <p className="text-muted-foreground max-w-md mx-auto">
           {getThankYouMessage(resultSegment)}
         </p>
+
+        {/* Kundenstimme Textarea — nur anzeigen wenn noch nicht submitted */}
+        {!testimonialSubmitted ? (
+          <div className="max-w-md mx-auto mt-8 space-y-3 text-left">
+            <h2 className="text-lg font-semibold text-center">Ihre Kundenstimme</h2>
+            <p className="text-sm text-muted-foreground text-center">
+              Moechten Sie uns noch etwas mitteilen? Ihr Feedback hilft uns, besser zu werden.
+            </p>
+            <textarea
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px] resize-y"
+              placeholder="Ihre Kundenstimme (optional)..."
+              value={testimonialComment}
+              onChange={(e) => setTestimonialComment(e.target.value)}
+            />
+            {testimonialError && <p className="text-sm text-destructive">{testimonialError}</p>}
+            <button
+              onClick={handleTestimonialSubmit}
+              disabled={testimonialSubmitting || !testimonialComment.trim()}
+              className="w-full h-11 rounded-md bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              {testimonialSubmitting ? "Wird gespeichert..." : "Kundenstimme absenden"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-green-600 font-medium mt-4">
+            Ihre Kundenstimme wurde gespeichert. Vielen Dank!
+          </p>
+        )}
+
         <p className="text-sm text-muted-foreground mt-8">— {surveyData.tenant_name}</p>
       </div>
     );
   }
 
+  // Normal flow (kein ?score in URL) — Score-Auswahl auf der Seite
   return (
     <div className="space-y-8">
       {/* Header */}

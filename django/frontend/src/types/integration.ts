@@ -165,6 +165,23 @@ export interface TwilioAccessToken {
 }
 
 // ---------------------------------------------------------------------------
+// WhatsApp
+// ---------------------------------------------------------------------------
+export interface WhatsAppConnection {
+  id: string;
+  label: string;
+  phone_number_id: string;
+  business_account_id: string;
+  webhook_verify_token: string;
+  display_phone_number: string;
+  is_active: boolean;
+  last_tested_at: string | null;
+  last_test_success: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Config Copy
 // ---------------------------------------------------------------------------
 export interface CopySourceTenant {

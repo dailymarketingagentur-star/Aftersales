@@ -24,6 +24,7 @@ from apps.integrations.models import (
     SequenceStep,
     TenantIntegration,
     TwilioConnection,
+    WhatsAppConnection,
 )
 from apps.integrations.registry import INTEGRATION_TYPES
 from apps.integrations.serializers import (
@@ -49,6 +50,9 @@ from apps.integrations.serializers import (
     TenantIntegrationToggleSerializer,
     TwilioConnectionSerializer,
     TwilioConnectionWriteSerializer,
+    WhatsAppConnectionSerializer,
+    WhatsAppConnectionWriteSerializer,
+    WhatsAppSendMessageSerializer,
 )
 from apps.integrations.config_copy_service import ConfigCopyService
 from apps.integrations.services import IntegrationService
@@ -817,6 +821,87 @@ class CreateJiraProjectView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Create Jira Issue (synchronous, dedicated endpoint)
+# ---------------------------------------------------------------------------
+class CreateJiraIssueView(APIView):
+    """POST: Create a Jira issue in the client's linked project."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
+
+    def post(self, request, slug):
+        from apps.integrations.serializers import CreateJiraIssueSerializer
+
+        serializer = CreateJiraIssueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Load client
+        client = Client.objects.filter(tenant=request.tenant, slug=slug).first()
+        if not client:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check client has a linked Jira project
+        integration = ClientIntegrationData.objects.filter(
+            client=client, integration_type="jira"
+        ).first()
+        if not integration or not integration.data.get("project_id"):
+            return Response(
+                {"detail": "Kein Jira-Projekt verknüpft. Bitte zuerst ein Projekt anlegen."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Load active Jira connection
+        conn = JiraConnection.objects.filter(tenant=request.tenant, is_active=True).first()
+        if not conn:
+            return Response(
+                {"detail": "Keine aktive Jira-Verbindung konfiguriert."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        project_id = integration.data["project_id"]
+        summary = data["summary"]
+        issue_type_id = data.get("issue_type_id") or (conn.config or {}).get("ISSUE_TYPE_ID", "10001")
+
+        token = conn.get_token()
+        auth = (conn.jira_email, token)
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+
+        try:
+            resp = requests.post(
+                f"{conn.jira_url}/rest/api/3/issue",
+                auth=auth,
+                headers=headers,
+                json={
+                    "fields": {
+                        "project": {"id": project_id},
+                        "summary": summary,
+                        "issuetype": {"id": issue_type_id},
+                    }
+                },
+                timeout=15,
+            )
+            if resp.status_code not in (200, 201):
+                body = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                detail = body.get("errors", body.get("errorMessages", [f"HTTP {resp.status_code}"]))
+                return Response(
+                    {"detail": f"Jira-Issue konnte nicht erstellt werden: {detail}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            issue_data = resp.json()
+        except requests.RequestException as e:
+            return Response({"detail": f"Jira-Verbindungsfehler: {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        issue_key = issue_data.get("key", "")
+        issue_url = f"{conn.jira_url}/browse/{issue_key}"
+
+        return Response(
+            {"issue_key": issue_key, "issue_url": issue_url},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Twilio — Connection, Test, Token, TwiML Webhook
 # ---------------------------------------------------------------------------
 class TwilioConnectionView(APIView):
@@ -968,6 +1053,11 @@ def _build_confluence_page_body(client, key_facts):
     """Build XHTML body (Confluence storage format) with client info + key facts table."""
     from xml.sax.saxutils import escape
 
+    from django.conf import settings as django_settings
+
+    frontend_url = getattr(django_settings, "FRONTEND_URL", "http://localhost:3000")
+    client_url = f"{frontend_url}/mandanten/{client.slug}"
+
     rows = ""
     for kf in key_facts:
         rows += (
@@ -980,8 +1070,19 @@ def _build_confluence_page_body(client, key_facts):
     if not rows:
         rows = '<tr><td colspan="2"><em>Keine Key-Facts vorhanden.</em></td></tr>'
 
+    warning_panel = (
+        '<ac:structured-macro ac:name="warning">'
+        "<ac:rich-text-body>"
+        "<p><strong>Diese Seite wird automatisch synchronisiert.</strong> "
+        "Bitte nicht manuell bearbeiten \u2014 \u00c4nderungen werden beim n\u00e4chsten Sync \u00fcberschrieben.</p>"
+        f'<p>Daten bearbeiten: <a href="{escape(client_url)}">Mandant in Aftersales \u00f6ffnen</a></p>'
+        "</ac:rich-text-body>"
+        "</ac:structured-macro>"
+    )
+
     body = (
-        f"<h2>Mandant: {escape(client.name)}</h2>"
+        warning_panel
+        + f"<h2>Mandant: {escape(client.name)}</h2>"
         "<table>"
         "<thead><tr><th>Eigenschaft</th><th>Wert</th></tr></thead>"
         "<tbody>"
@@ -1058,6 +1159,15 @@ class SyncConfluencePageView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Determine parent_page_id: from request body, then from TenantIntegration config
+        parent_page_id = request.data.get("parent_page_id", "").strip() if request.data.get("parent_page_id") else ""
+        if not parent_page_id:
+            tenant_integration = TenantIntegration.objects.filter(
+                tenant=request.tenant, integration_type="confluence"
+            ).first()
+            if tenant_integration:
+                parent_page_id = (tenant_integration.config or {}).get("confluence_parent_page_id", "")
+
         # Collect key facts
         key_facts = list(ClientKeyFact.objects.filter(client=client).order_by("position", "created_at"))
 
@@ -1124,16 +1234,20 @@ class SyncConfluencePageView(APIView):
                     )
                 space_id = spaces[0]["id"]
 
+                create_payload = {
+                    "spaceId": space_id,
+                    "status": "current",
+                    "title": page_title,
+                    "body": {"representation": "storage", "value": page_body},
+                }
+                if parent_page_id:
+                    create_payload["parentId"] = parent_page_id
+
                 create_resp = requests.post(
                     f"{conn.jira_url}/wiki/api/v2/pages",
                     auth=auth,
                     headers=headers,
-                    json={
-                        "spaceId": space_id,
-                        "status": "current",
-                        "title": page_title,
-                        "body": {"representation": "storage", "value": page_body},
-                    },
+                    json=create_payload,
                     timeout=15,
                 )
                 if create_resp.status_code not in (200, 201):
@@ -1167,6 +1281,18 @@ class SyncConfluencePageView(APIView):
             defaults={"data": integration_data, "tenant": request.tenant},
         )
 
+        # Save parent_page_id in TenantIntegration config (remembers choice for next sync)
+        if parent_page_id:
+            ti, _ = TenantIntegration.objects.get_or_create(
+                tenant=request.tenant,
+                integration_type="confluence",
+                defaults={"is_enabled": True},
+            )
+            config = ti.config or {}
+            config["confluence_parent_page_id"] = parent_page_id
+            ti.config = config
+            ti.save(update_fields=["config"])
+
         return Response(
             ClientIntegrationDataSerializer(obj).data,
             status=status.HTTP_201_CREATED if not page_id else status.HTTP_200_OK,
@@ -1197,3 +1323,365 @@ class ConfluenceSpacesView(APIView):
             return Response({"detail": f"Confluence API Fehler: {resp.status_code}"}, status=resp.status_code)
         except requests.RequestException as e:
             return Response({"detail": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+class ConfluencePagesView(APIView):
+    """GET: List pages in a Confluence space (for parent-page dropdown)."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
+
+    def get(self, request, space_key):
+        conn = JiraConnection.objects.filter(tenant=request.tenant, is_active=True).first()
+        if not conn:
+            return Response({"detail": "Keine Jira-Verbindung."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            token = conn.get_token()
+            auth = (conn.jira_email, token)
+            hdrs = {"Accept": "application/json"}
+
+            # Resolve space_key → space_id
+            space_resp = requests.get(
+                f"{conn.jira_url}/wiki/api/v2/spaces?keys={space_key}",
+                auth=auth,
+                headers=hdrs,
+                timeout=10,
+            )
+            if space_resp.status_code != 200:
+                return Response(
+                    {"detail": f"Space konnte nicht geladen werden: {space_resp.status_code}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+            spaces = space_resp.json().get("results", [])
+            if not spaces:
+                return Response({"detail": f"Space '{space_key}' nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+            space_id = spaces[0]["id"]
+
+            # List pages in the space (limit=100, sorted by title)
+            pages_resp = requests.get(
+                f"{conn.jira_url}/wiki/api/v2/spaces/{space_id}/pages?limit=100&sort=title",
+                auth=auth,
+                headers=hdrs,
+                timeout=10,
+            )
+            if pages_resp.status_code != 200:
+                return Response(
+                    {"detail": f"Seiten konnten nicht geladen werden: {pages_resp.status_code}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+            pages = pages_resp.json().get("results", [])
+            # Return simplified list: id + title
+            result = [{"id": p["id"], "title": p["title"]} for p in pages]
+
+            # Also include saved parent_page_id from TenantIntegration config
+            saved_parent_page_id = ""
+            ti = TenantIntegration.objects.filter(
+                tenant=request.tenant, integration_type="confluence"
+            ).first()
+            if ti:
+                saved_parent_page_id = (ti.config or {}).get("confluence_parent_page_id", "")
+
+            return Response({"pages": result, "saved_parent_page_id": saved_parent_page_id})
+        except requests.RequestException as e:
+            return Response({"detail": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp — Connection, Test, Send, Webhook
+# ---------------------------------------------------------------------------
+class WhatsAppConnectionView(APIView):
+    """GET/PUT/DELETE the tenant's WhatsApp Business connection."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), IsTenantOwner(), HasActiveSubscription()]
+
+    def get(self, request):
+        conn = WhatsAppConnection.objects.filter(tenant=request.tenant, is_active=True).first()
+        if not conn:
+            return Response({"detail": "Keine WhatsApp-Verbindung konfiguriert."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(WhatsAppConnectionSerializer(conn).data)
+
+    def put(self, request):
+        serializer = WhatsAppConnectionWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        conn, created = WhatsAppConnection.objects.update_or_create(
+            tenant=request.tenant,
+            is_active=True,
+            defaults={
+                "label": data.get("label", "WhatsApp Business"),
+                "phone_number_id": data["phone_number_id"],
+                "business_account_id": data["business_account_id"],
+                "webhook_verify_token": data["webhook_verify_token"],
+                "display_phone_number": data["display_phone_number"],
+            },
+        )
+        conn.set_access_token(data["access_token"])
+        conn.save(update_fields=["access_token_encrypted"])
+
+        return Response(
+            WhatsAppConnectionSerializer(conn).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def delete(self, request):
+        updated = WhatsAppConnection.objects.filter(tenant=request.tenant, is_active=True).update(is_active=False)
+        if not updated:
+            return Response({"detail": "Keine WhatsApp-Verbindung gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WhatsAppConnectionTestView(APIView):
+    """POST: Test the WhatsApp connection by fetching phone number info from Meta API."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), IsTenantOwner(), HasActiveSubscription()]
+
+    def post(self, request):
+        conn = WhatsAppConnection.objects.filter(tenant=request.tenant, is_active=True).first()
+        if not conn:
+            return Response({"detail": "Keine WhatsApp-Verbindung konfiguriert."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            token = conn.get_access_token()
+            resp = requests.get(
+                f"https://graph.facebook.com/v21.0/{conn.phone_number_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                success = True
+                message = f"Verbindung erfolgreich. Nummer: {resp.json().get('display_phone_number', conn.display_phone_number)}"
+            else:
+                success = False
+                error_data = resp.json().get("error", {})
+                message = f"API-Fehler: {error_data.get('message', resp.status_code)}"
+        except requests.RequestException as e:
+            success = False
+            message = f"Verbindungstest fehlgeschlagen: {e}"
+
+        conn.last_tested_at = timezone.now()
+        conn.last_test_success = success
+        conn.save(update_fields=["last_tested_at", "last_test_success"])
+
+        return Response({"success": success, "message": message})
+
+
+class WhatsAppSendMessageView(APIView):
+    """POST: Send a WhatsApp text message via Meta Cloud API."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
+
+    def post(self, request):
+        from apps.emails.models import WhatsAppMessage, WhatsAppMessageDirection, WhatsAppMessageStatus
+
+        serializer = WhatsAppSendMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        conn = WhatsAppConnection.objects.filter(tenant=request.tenant, is_active=True).first()
+        if not conn:
+            return Response(
+                {"detail": "Keine WhatsApp-Verbindung konfiguriert."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        to_number = data["to_number"].lstrip("+")
+        body_text = data["body_text"]
+
+        try:
+            token = conn.get_access_token()
+            resp = requests.post(
+                f"https://graph.facebook.com/v21.0/{conn.phone_number_id}/messages",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "messaging_product": "whatsapp",
+                    "to": to_number,
+                    "type": "text",
+                    "text": {"body": body_text},
+                },
+                timeout=15,
+            )
+
+            if resp.status_code in (200, 201):
+                resp_data = resp.json()
+                wa_message_id = None
+                messages = resp_data.get("messages", [])
+                if messages:
+                    wa_message_id = messages[0].get("id")
+
+                # Find client if provided
+                client = None
+                if data.get("client_id"):
+                    client = Client.objects.filter(
+                        tenant=request.tenant, id=data["client_id"]
+                    ).first()
+
+                msg = WhatsAppMessage.objects.create(
+                    tenant=request.tenant,
+                    wa_message_id=wa_message_id,
+                    direction=WhatsAppMessageDirection.OUTBOUND,
+                    from_number=conn.display_phone_number,
+                    to_number=f"+{to_number}",
+                    body_text=body_text,
+                    status=WhatsAppMessageStatus.SENT,
+                    client=client,
+                    metadata=resp_data,
+                )
+
+                from apps.emails.serializers import WhatsAppMessageSerializer
+                return Response(WhatsAppMessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+            else:
+                error_data = resp.json().get("error", {})
+                return Response(
+                    {"detail": f"WhatsApp API Fehler: {error_data.get('message', resp.status_code)}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+        except requests.RequestException as e:
+            return Response({"detail": f"Verbindungsfehler: {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class WhatsAppWebhookView(APIView):
+    """Public webhook endpoint for Meta WhatsApp Cloud API.
+
+    GET: Meta verification challenge (hub.verify_token + hub.challenge).
+    POST: Incoming messages and status updates.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """Meta sends a GET request to verify the webhook URL."""
+        mode = request.query_params.get("hub.mode")
+        token = request.query_params.get("hub.verify_token")
+        challenge = request.query_params.get("hub.challenge")
+
+        if mode != "subscribe" or not token or not challenge:
+            return Response({"detail": "Invalid verification request."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find any WhatsApp connection with this verify token
+        conn = WhatsAppConnection.objects.filter(
+            webhook_verify_token=token, is_active=True
+        ).first()
+        if not conn:
+            return Response({"detail": "Invalid verify token."}, status=status.HTTP_403_FORBIDDEN)
+
+        return HttpResponse(challenge, content_type="text/plain")
+
+    def post(self, request):
+        """Process incoming WhatsApp messages and status updates."""
+        from apps.emails.models import WhatsAppMessage, WhatsAppMessageDirection, WhatsAppMessageStatus, WhatsAppMessageType
+
+        body = request.data
+        if not isinstance(body, dict):
+            return Response(status=status.HTTP_200_OK)
+
+        for entry in body.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                if change.get("field") != "messages":
+                    continue
+
+                metadata = value.get("metadata", {})
+                display_phone = metadata.get("display_phone_number", "")
+
+                # Match tenant via display_phone_number
+                conn = WhatsAppConnection.objects.filter(
+                    display_phone_number__endswith=display_phone.replace("+", ""),
+                    is_active=True,
+                ).select_related("tenant").first()
+
+                if not conn:
+                    # Try matching by phone_number_id
+                    phone_number_id = metadata.get("phone_number_id", "")
+                    if phone_number_id:
+                        conn = WhatsAppConnection.objects.filter(
+                            phone_number_id=phone_number_id,
+                            is_active=True,
+                        ).select_related("tenant").first()
+                    if not conn:
+                        continue
+
+                tenant = conn.tenant
+
+                # Process incoming messages
+                for msg_data in value.get("messages", []):
+                    wa_message_id = msg_data.get("id")
+                    if not wa_message_id:
+                        continue
+
+                    # Skip duplicates
+                    if WhatsAppMessage.objects.filter(wa_message_id=wa_message_id).exists():
+                        continue
+
+                    from_number = msg_data.get("from", "")
+                    msg_type_raw = msg_data.get("type", "text")
+                    text_body = ""
+
+                    if msg_type_raw == "text":
+                        text_body = msg_data.get("text", {}).get("body", "")
+                    elif msg_type_raw in ("image", "document", "audio", "video"):
+                        caption = msg_data.get(msg_type_raw, {}).get("caption", "")
+                        text_body = caption if caption else f"[{msg_type_raw}]"
+
+                    msg_type_map = {
+                        "text": WhatsAppMessageType.TEXT,
+                        "image": WhatsAppMessageType.IMAGE,
+                        "document": WhatsAppMessageType.DOCUMENT,
+                        "audio": WhatsAppMessageType.AUDIO,
+                        "video": WhatsAppMessageType.VIDEO,
+                    }
+                    message_type = msg_type_map.get(msg_type_raw, WhatsAppMessageType.TEXT)
+
+                    # Client matching via ClientPhoneNumber
+                    client = None
+                    try:
+                        from apps.clients.models import ClientPhoneNumber
+                        phone_match = ClientPhoneNumber.objects.filter(
+                            tenant=tenant, number__endswith=from_number[-10:]
+                        ).select_related("client").first()
+                        if phone_match:
+                            client = phone_match.client
+                    except Exception:
+                        pass
+
+                    WhatsAppMessage.objects.create(
+                        tenant=tenant,
+                        wa_message_id=wa_message_id,
+                        direction=WhatsAppMessageDirection.INBOUND,
+                        from_number=f"+{from_number}",
+                        to_number=conn.display_phone_number,
+                        body_text=text_body,
+                        message_type=message_type,
+                        status=WhatsAppMessageStatus.RECEIVED,
+                        client=client,
+                        is_read=False,
+                        metadata=msg_data,
+                    )
+
+                # Process status updates
+                for status_data in value.get("statuses", []):
+                    wa_message_id = status_data.get("id")
+                    new_status = status_data.get("status", "")
+                    status_map = {
+                        "sent": WhatsAppMessageStatus.SENT,
+                        "delivered": WhatsAppMessageStatus.DELIVERED,
+                        "read": WhatsAppMessageStatus.READ,
+                        "failed": WhatsAppMessageStatus.FAILED,
+                    }
+                    if wa_message_id and new_status in status_map:
+                        WhatsAppMessage.objects.filter(
+                            wa_message_id=wa_message_id
+                        ).update(status=status_map[new_status])
+
+        return Response(status=status.HTTP_200_OK)

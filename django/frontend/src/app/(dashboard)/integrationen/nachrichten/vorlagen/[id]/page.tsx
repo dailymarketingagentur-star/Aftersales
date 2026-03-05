@@ -83,7 +83,7 @@ export default function VorlageDetailPage() {
         method: "DELETE",
         tenantId: currentTenantId!,
       });
-      router.push("/integrationen/email/vorlagen");
+      router.push("/integrationen/nachrichten/vorlagen");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Fehler beim Löschen.");
       setIsError(true);
@@ -107,7 +107,7 @@ export default function VorlageDetailPage() {
             <span className="ml-3 rounded bg-blue-100 px-2 py-0.5 text-sm font-normal text-blue-700">System</span>
           )}
         </h1>
-        <Link href="/integrationen/email/vorlagen">
+        <Link href="/integrationen/nachrichten/vorlagen">
           <Button variant="outline" size="sm">Zurück</Button>
         </Link>
       </div>

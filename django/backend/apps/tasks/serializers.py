@@ -89,6 +89,23 @@ class SubtaskSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Task
 # ---------------------------------------------------------------------------
+class TaskDashboardSerializer(serializers.ModelSerializer):
+    """Schlanker Serializer fuer die Dashboard-Uebersicht (ohne Subtasks etc.)."""
+
+    client_name = serializers.CharField(source="client.name", read_only=True)
+    client_slug = serializers.SlugField(source="client.slug", read_only=True)
+    assigned_to_email = serializers.EmailField(source="assigned_to.email", read_only=True, default=None)
+
+    class Meta:
+        model = Task
+        fields = [
+            "id", "title", "client", "client_name", "client_slug",
+            "due_date", "priority", "action_type", "status", "phase",
+            "assigned_to", "assigned_to_email", "created_at",
+        ]
+        read_only_fields = fields
+
+
 class TaskSerializer(serializers.ModelSerializer):
     subtasks = SubtaskSerializer(many=True, read_only=True)
     assigned_to_email = serializers.EmailField(source="assigned_to.email", read_only=True, default=None)

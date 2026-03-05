@@ -142,6 +142,15 @@ _register(
         icon="webhook",
         fields=[],
     ),
+    IntegrationTypeDef(
+        key="whatsapp",
+        label="WhatsApp Business",
+        description="Nachrichten über WhatsApp Business API senden und empfangen",
+        icon="whatsapp",
+        fields=[
+            IntegrationField(key="phone_number", label="WhatsApp-Nummer", field_type="text"),
+        ],
+    ),
 )
 
 

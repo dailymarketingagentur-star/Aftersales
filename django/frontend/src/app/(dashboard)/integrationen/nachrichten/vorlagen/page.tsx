@@ -26,10 +26,10 @@ export default function VorlagenPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">E-Mail-Vorlagen</h1>
         <div className="flex gap-2">
-          <Link href="/integrationen/email">
+          <Link href="/integrationen/nachrichten">
             <Button variant="outline" size="sm">Zurück</Button>
           </Link>
-          <Link href="/integrationen/email/vorlagen/neu">
+          <Link href="/integrationen/nachrichten/vorlagen/neu">
             <Button size="sm">Neue Vorlage</Button>
           </Link>
         </div>
@@ -42,7 +42,7 @@ export default function VorlagenPage() {
       ) : (
         <div className="space-y-3">
           {templates.map((tpl) => (
-            <Link key={tpl.id} href={`/integrationen/email/vorlagen/${tpl.id}`}>
+            <Link key={tpl.id} href={`/integrationen/nachrichten/vorlagen/${tpl.id}`}>
               <Card className="cursor-pointer transition-shadow hover:shadow-md">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between text-base">

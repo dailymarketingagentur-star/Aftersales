@@ -31,6 +31,7 @@ urlpatterns = [
     path("jira/fields/", views.JiraFieldsView.as_view(), name="jira-fields"),
     # Confluence Proxy
     path("confluence/spaces/", views.ConfluenceSpacesView.as_view(), name="confluence-spaces"),
+    path("confluence/spaces/<str:space_key>/pages/", views.ConfluencePagesView.as_view(), name="confluence-pages"),
     # Integration Types (Registry-based)
     path("types/", views.IntegrationTypeListView.as_view(), name="integration-types"),
     path("toggle/", views.IntegrationToggleView.as_view(), name="integration-toggle"),
@@ -39,4 +40,8 @@ urlpatterns = [
     path("twilio/connection/test/", views.TwilioConnectionTestView.as_view(), name="twilio-connection-test"),
     path("twilio/token/", views.TwilioAccessTokenView.as_view(), name="twilio-token"),
     path("twilio/twiml/voice/", views.TwiMLVoiceView.as_view(), name="twilio-twiml-voice"),
+    # WhatsApp
+    path("whatsapp/connection/", views.WhatsAppConnectionView.as_view(), name="whatsapp-connection"),
+    path("whatsapp/connection/test/", views.WhatsAppConnectionTestView.as_view(), name="whatsapp-connection-test"),
+    path("whatsapp/send/", views.WhatsAppSendMessageView.as_view(), name="whatsapp-send"),
 ]

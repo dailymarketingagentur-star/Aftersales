@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.text import slugify
 
@@ -67,7 +69,10 @@ class Client(TenantScopedModel):
 
     # Status
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ONBOARDING)
-    health_score = models.PositiveIntegerField(default=100)
+    health_score = models.PositiveIntegerField(default=35)
+    churn_warning_count = models.PositiveSmallIntegerField(default=0)
+    last_health_assessment_at = models.DateTimeField(null=True, blank=True)
+    last_churn_assessment_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, default="")
 
     class Meta(TenantScopedModel.Meta):
@@ -152,3 +157,130 @@ class ClientKeyFact(TenantScopedModel):
 
     def __str__(self):
         return f"{self.label}: {self.value[:50]}"
+
+
+class ClientPhoneNumber(TenantScopedModel):
+    """A phone number associated with a client, with optional label."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="phone_numbers")
+    label = models.CharField(max_length=255, blank=True, default="")
+    number = models.CharField(max_length=50)
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["position", "created_at"]
+
+    def __str__(self):
+        prefix = f"{self.label}: " if self.label else ""
+        return f"{prefix}{self.number}"
+
+
+class ClientEmailAddress(TenantScopedModel):
+    """An email address associated with a client, with optional label."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="email_addresses")
+    label = models.CharField(max_length=255, blank=True, default="")
+    email = models.EmailField()
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["position", "created_at"]
+
+    def __str__(self):
+        prefix = f"{self.label}: " if self.label else ""
+        return f"{prefix}{self.email}"
+
+
+_score_validators = [MinValueValidator(1), MaxValueValidator(5)]
+
+
+class HealthScoreAssessment(TenantScopedModel):
+    """Monthly health-score questionnaire with 7 categories (1-5 each, max 35)."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="health_assessments")
+    task = models.ForeignKey(
+        "tasks.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="health_assessment",
+    )
+    assessed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    result_satisfaction = models.PositiveSmallIntegerField(validators=_score_validators)
+    communication = models.PositiveSmallIntegerField(validators=_score_validators)
+    engagement = models.PositiveSmallIntegerField(validators=_score_validators)
+    relationship = models.PositiveSmallIntegerField(validators=_score_validators)
+    payment_behavior = models.PositiveSmallIntegerField(validators=_score_validators)
+    growth_potential = models.PositiveSmallIntegerField(validators=_score_validators)
+    referral_readiness = models.PositiveSmallIntegerField(validators=_score_validators)
+
+    total_score = models.PositiveSmallIntegerField(editable=False, default=0)
+    notes = models.TextField(blank=True, default="")
+
+    SCORE_FIELDS = [
+        "result_satisfaction", "communication", "engagement", "relationship",
+        "payment_behavior", "growth_potential", "referral_readiness",
+    ]
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Health {self.total_score}/35 — {self.client.name}"
+
+    def save(self, *args, **kwargs):
+        self.total_score = sum(getattr(self, f) for f in self.SCORE_FIELDS)
+        super().save(*args, **kwargs)
+
+    @property
+    def status_label(self) -> str:
+        if self.total_score >= 30:
+            return "Exzellent"
+        if self.total_score >= 24:
+            return "Gut"
+        if self.total_score >= 18:
+            return "Neutral"
+        if self.total_score >= 12:
+            return "Risiko"
+        return "Kritisch"
+
+
+class ChurnWarningAssessment(TenantScopedModel):
+    """Monthly churn-warning checklist with 10 boolean signals."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="churn_assessments")
+    task = models.ForeignKey(
+        "tasks.Task", on_delete=models.SET_NULL, null=True, blank=True, related_name="churn_assessment",
+    )
+    assessed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    slower_responses = models.BooleanField(default=False)
+    missed_checkins = models.BooleanField(default=False)
+    decreased_usage = models.BooleanField(default=False)
+    contract_inquiries = models.BooleanField(default=False)
+    new_decision_maker = models.BooleanField(default=False)
+    budget_cuts_mentioned = models.BooleanField(default=False)
+    competitor_mentions = models.BooleanField(default=False)
+    critical_feedback = models.BooleanField(default=False)
+    delayed_payments = models.BooleanField(default=False)
+    fewer_approvals = models.BooleanField(default=False)
+
+    active_signals = models.PositiveSmallIntegerField(editable=False, default=0)
+    notes = models.TextField(blank=True, default="")
+
+    SIGNAL_FIELDS = [
+        "slower_responses", "missed_checkins", "decreased_usage", "contract_inquiries",
+        "new_decision_maker", "budget_cuts_mentioned", "competitor_mentions",
+        "critical_feedback", "delayed_payments", "fewer_approvals",
+    ]
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Churn {self.active_signals}/10 — {self.client.name}"
+
+    def save(self, *args, **kwargs):
+        self.active_signals = sum(1 for f in self.SIGNAL_FIELDS if getattr(self, f))
+        super().save(*args, **kwargs)

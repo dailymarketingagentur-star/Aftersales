@@ -12,6 +12,7 @@ import type { NPSCampaign } from "@/types/nps";
 const TRIGGER_LABELS: Record<string, string> = {
   day_offset: "Tag nach Start",
   quarterly: "Quartalsweise",
+  whatsapp: "WhatsApp",
   manual: "Manuell",
 };
 

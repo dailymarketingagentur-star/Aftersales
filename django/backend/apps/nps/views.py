@@ -13,6 +13,7 @@ from apps.nps.serializers import (
     NPSResponseSerializer,
     NPSSurveySerializer,
     NPSTrendPointSerializer,
+    PreviewNPSSurveySerializer,
     PublicSurveySerializer,
     SendSurveySerializer,
     SubmitResponseSerializer,
@@ -89,6 +90,33 @@ class PublicSurveyRespondView(APIView):
             "score": response.score,
             "segment": response.segment,
         }, status=status.HTTP_201_CREATED)
+
+
+class PublicSurveyCommentView(APIView):
+    """PATCH /api/v1/nps/public/<token>/comment/ — Add comment to an already submitted response."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def patch(self, request, token):
+        try:
+            survey = NPSSurvey.objects.get(token=token, status=NPSSurvey.Status.RESPONDED)
+        except NPSSurvey.DoesNotExist:
+            return Response({"detail": "Umfrage nicht gefunden oder noch nicht beantwortet."}, status=status.HTTP_404_NOT_FOUND)
+
+        comment = request.data.get("comment", "").strip()
+        if not comment:
+            return Response({"detail": "Kommentar darf nicht leer sein."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            nps_response = NPSResponse.objects.get(survey=survey)
+        except NPSResponse.DoesNotExist:
+            return Response({"detail": "Antwort nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        nps_response.comment = comment
+        nps_response.save(update_fields=["comment"])
+
+        return Response({"detail": "Kundenstimme gespeichert. Vielen Dank!"})
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +281,10 @@ class SendSurveyView(APIView):
         except Client.DoesNotExist:
             return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
 
-        if not client.contact_email:
+        recipient_email = serializer.validated_data.get("recipient_email")
+        actual_email = recipient_email or client.contact_email
+
+        if not actual_email:
             return Response({"detail": "Mandant hat keine E-Mail-Adresse hinterlegt."}, status=status.HTTP_400_BAD_REQUEST)
 
         campaign = None
@@ -265,7 +296,9 @@ class SendSurveyView(APIView):
                 return Response({"detail": "Kampagne nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            survey = NPSService.send_survey(tenant=request.tenant, client=client, campaign=campaign)
+            survey = NPSService.send_survey(
+                tenant=request.tenant, client=client, campaign=campaign, recipient_email=recipient_email,
+            )
         except Exception as e:
             return Response({"detail": f"Umfrage konnte nicht gesendet werden: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -276,11 +309,30 @@ class SendSurveyView(APIView):
             tenant=request.tenant,
             client=client,
             activity_type=ClientActivity.ActivityType.NPS_SENT,
-            content=f"NPS-Umfrage gesendet an {client.contact_email}.",
+            content=f"NPS-Umfrage gesendet an {actual_email}.",
             author=request.user,
         )
 
         return Response(NPSSurveySerializer(survey).data, status=status.HTTP_201_CREATED)
+
+
+class PreviewSurveyView(APIView):
+    """POST /api/v1/nps/surveys/preview/ — Render NPS email preview without sending."""
+
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def post(self, request):
+        serializer = PreviewNPSSurveySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        client_id = serializer.validated_data["client_id"]
+        try:
+            client = Client.objects.get(tenant=request.tenant, id=client_id)
+        except Client.DoesNotExist:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        preview = NPSService.preview_survey(tenant=request.tenant, client=client)
+        return Response(preview)
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ from apps.nps.views import (
     NPSResponseListView,
     NPSSurveyListView,
     NPSTrendView,
+    PreviewSurveyView,
+    PublicSurveyCommentView,
     PublicSurveyRespondView,
     PublicSurveyView,
     SendSurveyView,
@@ -22,6 +24,7 @@ urlpatterns = [
     # Public (no auth, no X-Tenant-ID)
     path("public/<uuid:token>/", PublicSurveyView.as_view(), name="public-survey"),
     path("public/<uuid:token>/respond/", PublicSurveyRespondView.as_view(), name="public-survey-respond"),
+    path("public/<uuid:token>/comment/", PublicSurveyCommentView.as_view(), name="public-survey-comment"),
     # Dashboard
     path("dashboard/", NPSDashboardView.as_view(), name="dashboard"),
     path("dashboard/trend/", NPSTrendView.as_view(), name="dashboard-trend"),
@@ -31,6 +34,7 @@ urlpatterns = [
     # Surveys
     path("surveys/", NPSSurveyListView.as_view(), name="survey-list"),
     path("surveys/send/", SendSurveyView.as_view(), name="survey-send"),
+    path("surveys/preview/", PreviewSurveyView.as_view(), name="survey-preview"),
     # Responses
     path("responses/", NPSResponseListView.as_view(), name="response-list"),
     path("responses/<uuid:pk>/", NPSResponseDetailView.as_view(), name="response-detail"),

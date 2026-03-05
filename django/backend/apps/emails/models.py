@@ -37,6 +37,10 @@ class EmailProviderConnection(TenantScopedModel):
     from_email = models.EmailField(help_text="Absender-Email-Adresse.")
     from_name = models.CharField(max_length=255, blank=True, help_text="Absender-Anzeigename.")
 
+    # Inbound Parse (SendGrid only)
+    inbound_parse_enabled = models.BooleanField(default=False)
+    inbound_parse_domain = models.CharField(max_length=255, blank=True)
+
     # Test status
     last_tested_at = models.DateTimeField(null=True, blank=True)
     last_test_success = models.BooleanField(null=True, blank=True)
@@ -290,3 +294,110 @@ class SequenceEnrollment(TimestampedModel):
 
     def __str__(self):
         return f"[{self.status}] {self.recipient_email} → {self.sequence.slug}"
+
+
+# ------------------------------------------------------------------
+# Inbound Email (received via SendGrid Inbound Parse)
+# ------------------------------------------------------------------
+
+
+class InboundEmail(TenantScopedModel):
+    """Incoming email received via SendGrid Inbound Parse webhook."""
+
+    from_email = models.EmailField()
+    from_name = models.CharField(max_length=255, blank=True)
+    to_email = models.EmailField()
+    subject = models.CharField(max_length=500, blank=True)
+    body_text = models.TextField(blank=True)
+    client = models.ForeignKey(
+        "clients.Client",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inbound_emails",
+    )
+    has_attachments = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False)
+    is_assigned = models.BooleanField(default=True)
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        status = "gelesen" if self.is_read else "ungelesen"
+        return f"[{status}] {self.from_email}: {self.subject[:50]}"
+
+
+# ------------------------------------------------------------------
+# WhatsApp Messages (via Meta Cloud API)
+# ------------------------------------------------------------------
+
+
+class WhatsAppMessageDirection(models.TextChoices):
+    INBOUND = "inbound", "Eingehend"
+    OUTBOUND = "outbound", "Ausgehend"
+
+
+class WhatsAppMessageType(models.TextChoices):
+    TEXT = "text", "Text"
+    IMAGE = "image", "Bild"
+    DOCUMENT = "document", "Dokument"
+    AUDIO = "audio", "Audio"
+    VIDEO = "video", "Video"
+    TEMPLATE = "template", "Template"
+
+
+class WhatsAppMessageStatus(models.TextChoices):
+    RECEIVED = "received", "Empfangen"
+    SENT = "sent", "Gesendet"
+    DELIVERED = "delivered", "Zugestellt"
+    READ = "read", "Gelesen"
+    FAILED = "failed", "Fehlgeschlagen"
+
+
+class WhatsAppMessage(TenantScopedModel):
+    """WhatsApp message sent or received via Meta Cloud API."""
+
+    wa_message_id = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Meta Message ID (wamid.xxx).",
+    )
+    direction = models.CharField(
+        max_length=10,
+        choices=WhatsAppMessageDirection.choices,
+    )
+    from_number = models.CharField(max_length=20)
+    to_number = models.CharField(max_length=20)
+    body_text = models.TextField(blank=True)
+    message_type = models.CharField(
+        max_length=20,
+        choices=WhatsAppMessageType.choices,
+        default=WhatsAppMessageType.TEXT,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=WhatsAppMessageStatus.choices,
+        default=WhatsAppMessageStatus.RECEIVED,
+    )
+    client = models.ForeignKey(
+        "clients.Client",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="whatsapp_messages",
+    )
+    is_read = models.BooleanField(default=False)
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Raw-Webhook-Payload oder zusaetzliche Daten.",
+    )
+
+    class Meta(TenantScopedModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"[{self.direction}] {self.from_number} → {self.to_number}: {self.body_text[:50]}"

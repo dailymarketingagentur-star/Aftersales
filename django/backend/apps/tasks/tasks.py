@@ -9,6 +9,27 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Daily promotion: planned → open when due_date arrives
+# ---------------------------------------------------------------------------
+@shared_task
+def promote_planned_tasks():
+    """
+    Daily beat task (06:55): set all tasks with status=planned and
+    due_date <= today to status=open so they become actionable.
+    """
+    from apps.tasks.models import Task
+
+    today = date.today()
+    updated = Task.objects.filter(
+        status=Task.Status.PLANNED,
+        due_date__lte=today,
+    ).update(status=Task.Status.OPEN)
+
+    logger.info("promote_planned_tasks: %d tasks promoted to open", updated)
+
+
 # Action types that can be auto-triggered
 AUTO_TRIGGERABLE_TYPES = {"email", "email_sequence", "jira_project", "jira_ticket", "webhook"}
 

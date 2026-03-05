@@ -166,6 +166,73 @@ def check_sequence_completion(self, enrollment_id):
         enrollment.save(update_fields=["current_step"])
 
 
+@shared_task(bind=True, max_retries=3)
+def send_whatsapp_message_task(self, whatsapp_message_id):
+    """Send a WhatsApp message via Meta Cloud API. Retries with backoff."""
+    import requests as http_requests
+
+    from apps.emails.models import WhatsAppMessage, WhatsAppMessageStatus
+    from apps.integrations.models import WhatsAppConnection
+
+    try:
+        msg = WhatsAppMessage.objects.select_related("tenant").get(id=whatsapp_message_id)
+    except WhatsAppMessage.DoesNotExist:
+        logger.error("whatsapp_message_not_found", message_id=whatsapp_message_id)
+        return
+
+    if msg.status in (WhatsAppMessageStatus.SENT, WhatsAppMessageStatus.DELIVERED, WhatsAppMessageStatus.READ):
+        return
+
+    conn = WhatsAppConnection.objects.filter(tenant=msg.tenant, is_active=True).first()
+    if not conn:
+        msg.status = WhatsAppMessageStatus.FAILED
+        msg.metadata["error"] = "Keine WhatsApp-Verbindung konfiguriert."
+        msg.save(update_fields=["status", "metadata"])
+        return
+
+    try:
+        to_number = msg.to_number.lstrip("+")
+        token = conn.get_access_token()
+        resp = http_requests.post(
+            f"https://graph.facebook.com/v21.0/{conn.phone_number_id}/messages",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "messaging_product": "whatsapp",
+                "to": to_number,
+                "type": "text",
+                "text": {"body": msg.body_text},
+            },
+            timeout=15,
+        )
+
+        if resp.status_code in (200, 201):
+            resp_data = resp.json()
+            messages = resp_data.get("messages", [])
+            if messages:
+                msg.wa_message_id = messages[0].get("id")
+            msg.status = WhatsAppMessageStatus.SENT
+            msg.metadata.update(resp_data)
+            msg.save(update_fields=["status", "wa_message_id", "metadata"])
+            logger.info("whatsapp_sent", message_id=whatsapp_message_id, to=msg.to_number)
+        else:
+            raise Exception(f"Meta API Error: {resp.status_code} — {resp.text[:200]}")
+
+    except Exception as exc:
+        countdown = BACKOFF_SCHEDULE[self.request.retries] if self.request.retries < len(BACKOFF_SCHEDULE) else BACKOFF_SCHEDULE[-1]
+        logger.error("whatsapp_send_failed", message_id=whatsapp_message_id, error=str(exc), retry=self.request.retries)
+
+        if self.request.retries >= self.max_retries:
+            msg.status = WhatsAppMessageStatus.FAILED
+            msg.metadata["error"] = str(exc)
+            msg.save(update_fields=["status", "metadata"])
+            return
+
+        raise self.retry(exc=exc, countdown=countdown)
+
+
 def _rewrite_links_for_tracking(html, tracking_id, base_url):
     """Rewrite <a href="..."> links for click tracking."""
 

@@ -14,8 +14,10 @@ EXEMPT_PATHS = [
     "/api/v1/tenants/",
     "/__debug__/",
     "/api/v1/emails/track/",
+    "/api/v1/emails/inbound-webhook/",
     "/api/v1/integrations/twilio/twiml/",
     "/api/v1/nps/public/",
+    "/api/v1/integrations/whatsapp/webhook/",
 ]
 
 

@@ -8,13 +8,32 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.clients.models import Client, ClientKeyFact, Service, ServiceType
+from django.utils import timezone
+
+from apps.clients.models import (
+    ChurnWarningAssessment,
+    Client,
+    ClientEmailAddress,
+    ClientKeyFact,
+    ClientPhoneNumber,
+    HealthScoreAssessment,
+    Service,
+    ServiceType,
+)
 from apps.clients.serializers import (
+    ChurnWarningAssessmentSerializer,
+    ChurnWarningSubmitSerializer,
     ClientCreateSerializer,
+    ClientEmailAddressCreateSerializer,
+    ClientEmailAddressSerializer,
     ClientKeyFactCreateSerializer,
     ClientKeyFactSerializer,
+    ClientPhoneNumberCreateSerializer,
+    ClientPhoneNumberSerializer,
     ClientSerializer,
     ClientUpdateSerializer,
+    HealthScoreAssessmentSerializer,
+    HealthScoreSubmitSerializer,
     ServiceCreateSerializer,
     ServiceSerializer,
     ServiceTypeCreateSerializer,
@@ -36,7 +55,7 @@ class ClientListCreateView(APIView):
         return [permissions.IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
 
     def get(self, request):
-        qs = Client.objects.filter(tenant=request.tenant)
+        qs = Client.objects.filter(tenant=request.tenant).prefetch_related("phone_numbers", "email_addresses")
 
         # Filters
         status_filter = request.query_params.get("status")
@@ -73,7 +92,9 @@ class ClientDetailView(APIView):
 
     def _get_client(self, request, slug):
         try:
-            return Client.objects.get(tenant=request.tenant, slug=slug)
+            return Client.objects.prefetch_related("phone_numbers", "email_addresses").get(
+                tenant=request.tenant, slug=slug
+            )
         except Client.DoesNotExist:
             return None
 
@@ -323,6 +344,303 @@ class ClientKeyFactDetailView(APIView):
 
         key_fact.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Helper: sync primary cache fields
+# ---------------------------------------------------------------------------
+def _sync_primary_phone(client):
+    """Write the first phone number (by position) into client.contact_phone."""
+    first = client.phone_numbers.order_by("position", "created_at").first()
+    client.contact_phone = first.number if first else ""
+    client.save(update_fields=["contact_phone", "updated_at"])
+
+
+def _sync_primary_email(client):
+    """Write the first email address (by position) into client.contact_email."""
+    first = client.email_addresses.order_by("position", "created_at").first()
+    client.contact_email = first.email if first else ""
+    client.save(update_fields=["contact_email", "updated_at"])
+
+
+# ---------------------------------------------------------------------------
+# ClientPhoneNumber views (nested under client)
+# ---------------------------------------------------------------------------
+class ClientPhoneNumberListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [permissions.IsAuthenticated(), IsTenantMember(), HasActiveSubscription()]
+        return [permissions.IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
+
+    def _get_client(self, request, slug):
+        try:
+            return Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return None
+
+    def get(self, request, slug):
+        client = self._get_client(request, slug)
+        if client is None:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        phones = ClientPhoneNumber.objects.filter(client=client)
+        return Response(ClientPhoneNumberSerializer(phones, many=True).data)
+
+    def post(self, request, slug):
+        client = self._get_client(request, slug)
+        if client is None:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ClientPhoneNumberCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = ClientPhoneNumber.objects.create(
+            tenant=request.tenant,
+            client=client,
+            **serializer.validated_data,
+        )
+        _sync_primary_phone(client)
+        return Response(ClientPhoneNumberSerializer(phone).data, status=status.HTTP_201_CREATED)
+
+
+class ClientPhoneNumberDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantAdmin, HasActiveSubscription]
+
+    def _get_phone(self, request, slug, pk):
+        try:
+            return ClientPhoneNumber.objects.select_related("client").get(
+                client__tenant=request.tenant, client__slug=slug, pk=pk
+            )
+        except ClientPhoneNumber.DoesNotExist:
+            return None
+
+    def patch(self, request, slug, pk):
+        phone = self._get_phone(request, slug, pk)
+        if phone is None:
+            return Response({"detail": "Telefonnummer nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ClientPhoneNumberSerializer(phone, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        _sync_primary_phone(phone.client)
+        return Response(ClientPhoneNumberSerializer(phone).data)
+
+    def delete(self, request, slug, pk):
+        phone = self._get_phone(request, slug, pk)
+        if phone is None:
+            return Response({"detail": "Telefonnummer nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        client = phone.client
+        phone.delete()
+        _sync_primary_phone(client)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# ClientEmailAddress views (nested under client)
+# ---------------------------------------------------------------------------
+class ClientEmailAddressListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [permissions.IsAuthenticated(), IsTenantMember(), HasActiveSubscription()]
+        return [permissions.IsAuthenticated(), IsTenantAdmin(), HasActiveSubscription()]
+
+    def _get_client(self, request, slug):
+        try:
+            return Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return None
+
+    def get(self, request, slug):
+        client = self._get_client(request, slug)
+        if client is None:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+        emails = ClientEmailAddress.objects.filter(client=client)
+        return Response(ClientEmailAddressSerializer(emails, many=True).data)
+
+    def post(self, request, slug):
+        client = self._get_client(request, slug)
+        if client is None:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ClientEmailAddressCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email_entry = ClientEmailAddress.objects.create(
+            tenant=request.tenant,
+            client=client,
+            **serializer.validated_data,
+        )
+        _sync_primary_email(client)
+        return Response(ClientEmailAddressSerializer(email_entry).data, status=status.HTTP_201_CREATED)
+
+
+class ClientEmailAddressDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantAdmin, HasActiveSubscription]
+
+    def _get_email(self, request, slug, pk):
+        try:
+            return ClientEmailAddress.objects.select_related("client").get(
+                client__tenant=request.tenant, client__slug=slug, pk=pk
+            )
+        except ClientEmailAddress.DoesNotExist:
+            return None
+
+    def patch(self, request, slug, pk):
+        email_entry = self._get_email(request, slug, pk)
+        if email_entry is None:
+            return Response({"detail": "E-Mail-Adresse nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ClientEmailAddressSerializer(email_entry, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        _sync_primary_email(email_entry.client)
+        return Response(ClientEmailAddressSerializer(email_entry).data)
+
+    def delete(self, request, slug, pk):
+        email_entry = self._get_email(request, slug, pk)
+        if email_entry is None:
+            return Response({"detail": "E-Mail-Adresse nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        client = email_entry.client
+        email_entry.delete()
+        _sync_primary_email(client)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Health Score & Churn Warning Assessment views
+# ---------------------------------------------------------------------------
+class SubmitHealthCheckView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def post(self, request, slug, pk):
+        try:
+            client = Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.tasks.models import ClientActivity, Task
+
+        try:
+            task = Task.objects.get(pk=pk, client=client)
+        except Task.DoesNotExist:
+            return Response({"detail": "Aufgabe nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = HealthScoreSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        assessment = HealthScoreAssessment.objects.create(
+            tenant=request.tenant,
+            client=client,
+            task=task,
+            assessed_by=request.user,
+            **data,
+        )
+
+        # Update client cache fields
+        client.health_score = assessment.total_score
+        client.last_health_assessment_at = timezone.now()
+        client.save(update_fields=["health_score", "last_health_assessment_at", "updated_at"])
+
+        # Mark task completed
+        task.status = Task.Status.COMPLETED
+        task.completed_at = timezone.now()
+        task.completed_by = request.user
+        task.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+
+        ClientActivity.objects.create(
+            tenant=request.tenant,
+            client=client,
+            task=task,
+            activity_type=ClientActivity.ActivityType.HEALTH_CHECK_COMPLETED,
+            content=f"Health-Check: {assessment.total_score}/35 ({assessment.status_label})",
+            author=request.user,
+        )
+
+        return Response({
+            "total_score": assessment.total_score,
+            "status_label": assessment.status_label,
+            "detail": f"Health-Check gespeichert: {assessment.total_score}/35 ({assessment.status_label})",
+        })
+
+
+class SubmitChurnCheckView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def post(self, request, slug, pk):
+        try:
+            client = Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        from apps.tasks.models import ClientActivity, Task
+
+        try:
+            task = Task.objects.get(pk=pk, client=client)
+        except Task.DoesNotExist:
+            return Response({"detail": "Aufgabe nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ChurnWarningSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        assessment = ChurnWarningAssessment.objects.create(
+            tenant=request.tenant,
+            client=client,
+            task=task,
+            assessed_by=request.user,
+            **data,
+        )
+
+        # Update client cache fields
+        client.churn_warning_count = assessment.active_signals
+        client.last_churn_assessment_at = timezone.now()
+        client.save(update_fields=["churn_warning_count", "last_churn_assessment_at", "updated_at"])
+
+        # Mark task completed
+        task.status = Task.Status.COMPLETED
+        task.completed_at = timezone.now()
+        task.completed_by = request.user
+        task.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+
+        ClientActivity.objects.create(
+            tenant=request.tenant,
+            client=client,
+            task=task,
+            activity_type=ClientActivity.ActivityType.CHURN_CHECK_COMPLETED,
+            content=f"Churn-Check: {assessment.active_signals}/10 Warnsignale aktiv",
+            author=request.user,
+        )
+
+        return Response({
+            "active_signals": assessment.active_signals,
+            "detail": f"Churn-Check gespeichert: {assessment.active_signals}/10 Warnsignale aktiv",
+        })
+
+
+class HealthAssessmentListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def get(self, request, slug):
+        try:
+            client = Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        assessments = HealthScoreAssessment.objects.filter(client=client).select_related("assessed_by")[:10]
+        return Response(HealthScoreAssessmentSerializer(assessments, many=True).data)
+
+
+class ChurnAssessmentListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsTenantMember, HasActiveSubscription]
+
+    def get(self, request, slug):
+        try:
+            client = Client.objects.get(tenant=request.tenant, slug=slug)
+        except Client.DoesNotExist:
+            return Response({"detail": "Mandant nicht gefunden."}, status=status.HTTP_404_NOT_FOUND)
+
+        assessments = ChurnWarningAssessment.objects.filter(client=client).select_related("assessed_by")[:10]
+        return Response(ChurnWarningAssessmentSerializer(assessments, many=True).data)
 
 
 # ---------------------------------------------------------------------------

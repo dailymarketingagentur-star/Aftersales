@@ -44,7 +44,7 @@ export default function NeueVorlagePage() {
         }),
         tenantId: currentTenantId!,
       });
-      router.push("/integrationen/email/vorlagen");
+      router.push("/integrationen/nachrichten/vorlagen");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Fehler beim Erstellen.");
       setIsError(true);
@@ -57,7 +57,7 @@ export default function NeueVorlagePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Neue E-Mail-Vorlage</h1>
-        <Link href="/integrationen/email/vorlagen">
+        <Link href="/integrationen/nachrichten/vorlagen">
           <Button variant="outline" size="sm">Zurück</Button>
         </Link>
       </div>

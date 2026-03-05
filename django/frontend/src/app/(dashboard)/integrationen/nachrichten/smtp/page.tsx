@@ -145,7 +145,7 @@ export default function SmtpPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">SMTP-Konfiguration</h1>
-        <Link href="/integrationen/email">
+        <Link href="/integrationen/nachrichten">
           <Button variant="outline" size="sm">Zurück</Button>
         </Link>
       </div>
@@ -249,7 +249,7 @@ export default function SmtpPage() {
       </Card>
 
       <div className="pt-2">
-        <Link href="/integrationen/email/vorlagen">
+        <Link href="/integrationen/nachrichten/vorlagen">
           <Button variant="link" className="px-0">E-Mail-Vorlagen verwalten →</Button>
         </Link>
       </div>
