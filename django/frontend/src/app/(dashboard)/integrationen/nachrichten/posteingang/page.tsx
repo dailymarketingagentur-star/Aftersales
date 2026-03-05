@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,14 @@ type UnifiedMessage =
   | { channel: "whatsapp"; data: WhatsAppMessage };
 
 export default function PosteingangPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Laden...</p>}>
+      <PosteingangContent />
+    </Suspense>
+  );
+}
+
+function PosteingangContent() {
   const { currentTenantId } = useTenant();
   const searchParams = useSearchParams();
   const clientId = searchParams.get("client");

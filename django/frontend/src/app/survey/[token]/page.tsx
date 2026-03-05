@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
 interface SurveyData {
@@ -39,6 +39,14 @@ function getThankYouMessage(segment: string): string {
 }
 
 export default function SurveyPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><p>Laden...</p></div>}>
+      <SurveyContent />
+    </Suspense>
+  );
+}
+
+function SurveyContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const token = params.token as string;
