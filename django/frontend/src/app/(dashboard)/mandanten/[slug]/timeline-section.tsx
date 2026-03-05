@@ -14,6 +14,14 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   status_changed: "Status geändert",
   email_sent: "E-Mail gesendet",
   jira_executed: "Jira ausgeführt",
+  webhook_executed: "Webhook ausgeführt",
+  nps_sent: "NPS gesendet",
+  nps_received: "NPS erhalten",
+  auto_trigger_success: "Auto-Trigger erfolgreich",
+  auto_trigger_failed: "Auto-Trigger fehlgeschlagen",
+  list_removed: "Liste entfernt",
+  health_check_completed: "Health-Check abgeschlossen",
+  churn_check_completed: "Churn-Check abgeschlossen",
 };
 
 const TYPE_COLORS: Record<ActivityType, string> = {
@@ -24,6 +32,14 @@ const TYPE_COLORS: Record<ActivityType, string> = {
   status_changed: "bg-yellow-100 text-yellow-700",
   email_sent: "bg-purple-100 text-purple-700",
   jira_executed: "bg-indigo-100 text-indigo-700",
+  webhook_executed: "bg-orange-100 text-orange-700",
+  nps_sent: "bg-teal-100 text-teal-700",
+  nps_received: "bg-cyan-100 text-cyan-700",
+  auto_trigger_success: "bg-lime-100 text-lime-700",
+  auto_trigger_failed: "bg-red-100 text-red-700",
+  list_removed: "bg-slate-100 text-slate-600",
+  health_check_completed: "bg-emerald-100 text-emerald-700",
+  churn_check_completed: "bg-amber-100 text-amber-700",
 };
 
 interface PaginatedResponse {

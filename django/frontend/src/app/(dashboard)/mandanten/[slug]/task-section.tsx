@@ -2138,6 +2138,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
   }
 
   function renderTaskList(tasks: Task[]) {
+    const today = new Date().toISOString().slice(0, 10);
     // Gruppierung: group_label wenn vorhanden, sonst Phase
     const grouped = tasks.reduce<Record<string, Task[]>>((acc, task) => {
       const key = task.group_label || PHASE_LABELS[task.phase] || `Phase ${task.phase}`;
@@ -2217,6 +2218,7 @@ export function TaskSection({ slug, tenantId }: TaskSectionProps) {
   }
 
   function renderOnboardingTab() {
+    const today = new Date().toISOString().slice(0, 10);
     // Gruppierung nach group_label (Fallback Phase)
     const grouped = onboardingTasks.reduce<Record<string, Task[]>>(
       (acc, t) => {

@@ -8,6 +8,7 @@ export type ActionType =
   | "jira_project"
   | "jira_ticket"
   | "webhook"
+  | "whatsapp"
   | "health_check"
   | "churn_check"
   | "manual";
